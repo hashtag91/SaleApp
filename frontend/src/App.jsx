@@ -10,8 +10,22 @@ import {
   FaDownload,
   FaBox,
   FaCreditCard,
-  FaSearch
+  FaSearch,
+  FaChartBar
 } from 'react-icons/fa';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Legend,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
 
 export default function App() {
   const [view, setView] = useState('pos');
@@ -27,6 +41,7 @@ export default function App() {
   const [editProduct, setEditProduct] = useState(null);
   const [editedProduct, setEditedProduct] = useState({ name: '', price: '', stock: '', sku: '', image: null });
 
+  const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
 
   const loadProducts = async () => {
     const res = await axios.get('/api/products');
@@ -166,7 +181,6 @@ export default function App() {
     }
   }
 
-
   const handleDeleteProduct = async (id) => {
     if (!window.confirm('Supprimer ce produit ?')) return;
     await axios.delete(`/api/products/${id}`);
@@ -188,6 +202,27 @@ export default function App() {
     (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Group sales data by date
+  const dailySales = sales.reduce((acc, s) => {
+    const date = new Date(s.date).toLocaleDateString();
+    acc[date] = (acc[date] || 0) + s.total;
+    return acc;
+  }, {});
+
+  const dailyData = Object.entries(dailySales).map(([date, total]) => ({ name: date, total }));
+
+  // Group items sold by SKU
+  const productCount = {};
+  sales.forEach(s => {
+    const items = JSON.parse(s.items);
+    items.forEach(i => {
+      const label = i.sku ? `${i.sku} - ${i.name}` : i.name;
+      productCount[label] = (productCount[label] || 0) + i.qty;
+    });
+  });
+
+  const productChartData = Object.entries(productCount).map(([name, value]) => ({ name, value }));
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="mb-6 flex gap-3 justify-center">
@@ -199,6 +234,15 @@ export default function App() {
         </button>
         <button onClick={() => { setView('sales'); loadSales(); }} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'sales' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
           <FaCreditCard /> Ventes
+        </button>
+        <button
+          onClick={() => {
+            setView('charts');
+            loadSales();
+          }}
+          className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'charts' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}
+        >
+          <FaChartBar /> Graphiques
         </button>
       </div>
 
@@ -230,7 +274,7 @@ export default function App() {
                   <div className="w-1/2 p-3 flex flex-col justify-center space-y-1 text-left">
                     <span className="font-semibold text-lg truncate">{p.name}</span>
                     <span className="text-sm text-gray-100">SKU: {p.sku}</span>
-                    <span>€{p.price.toFixed(2)}</span>
+                    <span>FCFA{p.price.toFixed(2)}</span>
                     <span className="text-sm text-gray-200">Stock: {p.stock}</span>
                     <div className="mt-auto text-right">
                       <FaShoppingCart className="inline-block text-white" />
@@ -354,10 +398,10 @@ export default function App() {
                 </div>
                 <div className="flex gap-4">
                   <button onClick={() => handleEditProduct(p)} className="text-yellow-600 hover:text-yellow-800 font-semibold">
-                    Modifier
+                    <FaEdit />
                   </button>
                   <button onClick={() => handleDeleteProduct(p.id)} className="text-red-600 hover:text-red-800 font-semibold">
-                    Supprimer
+                    <FaTrash />
                   </button>
                 </div>
               </li>
@@ -367,25 +411,129 @@ export default function App() {
       )}
 
       {view === 'sales' && (
-        <div>
-          <h2 className="text-2xl font-bold mb-4 text-gray-800">Historique des ventes</h2>
-          <div className="flex gap-3 mb-4">
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            <button onClick={downloadCSV} className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition">
-              Exporter CSV
+        <div className="p-4">
+          <h2 className="text-3xl font-bold mb-6 text-gray-800">🧾 Historique des ventes</h2>
+
+          {/* Filtres et export */}
+          <div className="flex flex-wrap gap-3 mb-6">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={downloadCSV}
+              className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+            >
+              📥 Exporter CSV
             </button>
           </div>
-          <ul className="max-h-[600px] overflow-auto">
-            {sales.map((s) => (
-              <li key={s.id} className="mb-4 border rounded-xl p-4 bg-white shadow">
-                <div className="font-semibold text-gray-900">
-                  {new Date(s.date).toLocaleString()} - Total: FCFA{s.total.toFixed(2)}
+
+          {/* Liste des ventes */}
+          <div className="max-h-[600px] overflow-auto space-y-6">
+            {sales.map((s) => {
+              // Si s.items est un JSON stringifié
+              let items = [];
+              try {
+                items = typeof s.items === 'string' ? JSON.parse(s.items) : s.items;
+              } catch (e) {
+                console.error('Erreur parsing items:', e);
+              }
+
+              return (
+                <div key={s.id} className="border border-gray-200 rounded-xl p-5 bg-white shadow-sm hover:shadow-md transition">
+                  <div className="flex justify-between items-center mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800">🧾 Vente #{s.id}</h3>
+                      <p className="text-sm text-gray-500">{new Date(s.date).toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm text-gray-500">Total</span>
+                      <div className="text-xl font-bold text-green-600">FCFA {s.total.toFixed(2)}</div>
+                    </div>
+                  </div>
+
+                  {/* Tableau des articles */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm border border-gray-300 rounded-lg">
+                      <thead className="bg-gray-100 text-gray-700">
+                        <tr>
+                          <th className="px-4 py-2 border">Produit</th>
+                          <th className="px-4 py-2 border">Sku</th>
+                          <th className="px-4 py-2 border">Quantité</th>
+                          <th className="px-4 py-2 border">Prix unitaire</th>
+                          <th className="px-4 py-2 border">Sous-total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, idx) => (
+                          <tr key={idx} className="text-gray-800">
+                            <td className="px-4 py-2 border">{item.name}</td>
+                            <td className="px-4 py-2 border">{item.sku}</td>
+                            <td className="px-4 py-2 border text-center">{item.qty}</td>
+                            <td className="px-4 py-2 border text-right">FCFA {Number(item.price).toFixed(2)}</td>
+                            <td className="px-4 py-2 border text-right">FCFA {(item.price * item.qty).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <pre className="text-sm bg-gray-100 p-3 rounded mt-2 whitespace-pre-wrap">{s.items}</pre>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {view === 'charts' && (
+        <div>
+          <h2 className="text-2xl font-bold mb-6 text-gray-800">📊 Statistiques des Ventes</h2>
+          <div className="max-w-4xl mx-auto bg-white rounded-xl shadow p-6 mb-2">
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart
+                data={sales.map(s => ({
+                  name: new Date(s.date).toLocaleDateString(),
+                  total: s.total
+                }))}
+                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis tickFormatter={v => `FCFA ${v}`} />
+                <Tooltip formatter={(value) => [`FCFA ${value}`, 'Total']} />
+                <Legend />
+                <Bar dataKey="total" fill="#4F46E5" name="Total des ventes" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="max-w-3xl mx-auto bg-white rounded-xl shadow p-6">
+            <h3 className="text-lg font-semibold mb-4">Produits les plus vendus</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={productChartData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={100}
+                  fill="#8884d8"
+                  label
+                >
+                  {productChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>
