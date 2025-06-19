@@ -369,86 +369,117 @@ export default function App() {
       {view === 'admin' && (
         <div>
           <h2 className="text-2xl font-bold mb-4 text-gray-800">Produits</h2>
-          <button onClick={handleAddProduct} className="mb-6 px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
+          <button onClick={() => setShowAddProduct(true)} className="mb-6 px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
             Ajouter un produit
           </button>
 
           {showAddProduct && (
-            <form onSubmit={submitNewProduct} className="mb-6 border p-6 rounded-xl max-w-md bg-white shadow">
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">Nom</label>
-                <input type="text" name="name" value={newProduct.name} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">SKU</label>
-                <input type="text" name="sku" value={newProduct.sku} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">Prix (FCFA)</label>
-                <input type="number" name="price" step="0.01" value={newProduct.price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="" className="bloc mb-1 font-medium text-gray-700">Prix d'achat (FCFA)</label>
-                <input type="number" name="buy_price" value={newProduct.buy_price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2" required/>
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">Stock</label>
-                <input type="number" name="stock" value={newProduct.stock} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-6">
-                <label className="block mb-1 font-medium text-gray-700">Image</label>
-                <input type="file" name="image" accept="image/*" onChange={handleProductChange} className="w-full" />
-              </div>
-              <div className="flex gap-3">
-                <button type="submit" className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition">
-                  Ajouter le produit
+            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+              <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative">
+                <button
+                  onClick={() => setShowAddProduct(false)}
+                  className="absolute top-2 right-2 text-gray-500 hover:text-black"
+                >
+                  ✕
                 </button>
-                <button type="button" onClick={() => setShowAddProduct(false)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
-                  Annuler
-                </button>
+
+                <h3 className="text-xl font-semibold mb-4">Ajouter un produit</h3>
+
+                <form onSubmit={submitNewProduct} className="mb-6 border p-6 rounded-xl max-w-md bg-white shadow">
+                  <div className="mb-4">
+                    <label className="block mb-1 font-medium text-gray-700">Nom</label>
+                    <input type="text" name="name" value={newProduct.name} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block mb-1 font-medium text-gray-700">SKU</label>
+                    <input type="text" name="sku" value={newProduct.sku} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block mb-1 font-medium text-gray-700">Prix (FCFA)</label>
+                    <input type="number" name="price" step="0.01" value={newProduct.price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-4">
+                    <label htmlFor="" className="bloc mb-1 font-medium text-gray-700">Prix d'achat (FCFA)</label>
+                    <input type="number" name="buy_price" value={newProduct.buy_price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2" required/>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block mb-1 font-medium text-gray-700">Stock</label>
+                    <input type="number" name="stock" value={newProduct.stock} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-6">
+                    <label className="block mb-1 font-medium text-gray-700">Image</label>
+                    <input type="file" name="image" accept="image/*" onChange={handleProductChange} className="w-full" />
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="submit" className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition">
+                      Ajouter le produit
+                    </button>
+                    <button type="button" onClick={() => setShowAddProduct(false)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
+                      Annuler
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
           )}
           {editProduct && (
-            <form onSubmit={submitEditProduct} className="mb-6 border p-6 rounded-xl max-w-md bg-white shadow">
-              <h3 className="text-lg font-bold mb-4 text-gray-800">Modifier le produit</h3>
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">Nom</label>
-                <input type="text" name="name" value={editedProduct.name} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">SKU</label>
-                <input type="text" name="sku" value={editedProduct.sku} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">Prix (FCFA)</label>
-                <input type="number" name="price" step="0.01" value={editedProduct.price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">Prix d'achat (FCFA)</label>
-                <input type="number" name="buy_price" step="0.01" value={editedProduct.buy_price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1 font-medium text-gray-700">Stock</label>
-                <input type="number" name="stock" value={editedProduct.stock} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-              </div>
-              <div className="mb-6">
-                <label className="block mb-1 font-medium text-gray-700">Image (optionnelle)</label>
-                <input type="file" name="image" accept="image/*" onChange={handleEditChange} className="w-full" />
-              </div>
-              <div className="flex gap-3">
-                <button type="submit" className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 transition">
-                  Enregistrer les modifications
+            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+              <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative">
+                <button
+                  onClick={() => setEditProduct(null)}
+                  className="absolute top-2 right-2 text-gray-500 hover:text-black"
+                >
+                  ✕
                 </button>
-                <button type="button" onClick={() => setEditProduct(null)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
-                  Annuler
-                </button>
+
+                <h3 className="text-xl font-semibold mb-3">Modifier le produit</h3>
+                <form onSubmit={submitEditProduct} className="mb-4 border p-6 rounded-xl max-w-md bg-white shadow">
+                  <div className="mb-2">
+                    <label className="block mb-1 font-medium text-gray-700">Nom</label>
+                    <input type="text" name="name" value={editedProduct.name} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-2">
+                    <label className="block mb-1 font-medium text-gray-700">SKU</label>
+                    <input type="text" name="sku" value={editedProduct.sku} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-2">
+                    <label className="block mb-1 font-medium text-gray-700">Prix (FCFA)</label>
+                    <input type="number" name="price" step="0.01" value={editedProduct.price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-2">
+                    <label className="block mb-1 font-medium text-gray-700">Prix d'achat (FCFA)</label>
+                    <input type="number" name="buy_price" step="0.01" value={editedProduct.buy_price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-2">
+                    <label className="block mb-1 font-medium text-gray-700">Stock</label>
+                    <input type="number" name="stock" value={editedProduct.stock} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block mb-1 font-medium text-gray-700">Image (optionnelle)</label>
+                    <input type="file" name="image" accept="image/*" onChange={handleEditChange} className="w-full" />
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="submit" className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 transition">
+                      Enregistrer les modifications
+                    </button>
+                    <button type="button" onClick={() => setEditProduct(null)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
+                      Annuler
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
+            
           )}
           <ul>
             {filteredProducts.map((p) => (
-              <li key={p.id} className="mb-4 border rounded-xl p-4 flex items-center gap-6 bg-white shadow">
+              <li key={p.id} className={`mb-4 border rounded-xl p-4 flex items-center gap-6 shadow ${
+                p.stock === 0
+                ? 'bg-red-100 border-red-500'
+                : p.stock <= 2
+                ? 'bg-yellow-100 border-yellow-400'
+                : 'bg-white border-gray-300'
+              }`}>
                 {p.imageUrl ? (
                   <img src={p.imageUrl} alt={p.name} className="w-20 h-20 object-contain rounded-lg" />
                 ) : (
