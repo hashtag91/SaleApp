@@ -37,12 +37,12 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editProduct, setEditProduct] = useState(null);
   const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', sku: '', image: null });
+  const [stockFilter, setStockFilter] = useState('all');
 
   const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
 
   const loadProducts = async () => {
     const res = await axios.get('/api/products');
-    console.log("✅ Produits reçus du backend :", res.data)
     setProducts(res.data);
   };
 
@@ -205,10 +205,19 @@ export default function App() {
     link.click();
   };
 
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredProducts = products.filter((p) => {
+    const matchSearch =
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchStock =
+      stockFilter === 'all' ? true :
+      stockFilter === 'rupture' ? p.stock === 0 :
+      stockFilter === 'low' ? p.stock > 0 && p.stock <= 2 :
+      stockFilter === 'ok' ? p.stock > 2 : true;
+
+    return matchSearch && matchStock;
+  });
 
   // Group sales data by date
   const dailySales = sales.reduce((acc, s) => {
@@ -264,13 +273,14 @@ export default function App() {
     items.forEach(item => {
       dailyTotals[date].vente += item.price * item.qty;
       dailyTotals[date].achat += (item.buy_price || 0) * item.qty; // buy_price doit être inclus dans l'objet cart
-      console.log('item',item);
     });
   });
 
   const comparisonData = Object.entries(dailyTotals).map(([date, val]) => ({ date, ...val }));
 
-  console.log("📊 Données pour le graphique :", comparisonData);
+  const ruptureStock = products.filter(p => p.stock === 0).length;
+  const stockFaible = products.filter(p => p.stock > 0 && p.stock <= 2).length;
+  const stockOk = products.filter(p => p.stock > 2).length;
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -369,9 +379,37 @@ export default function App() {
       {view === 'admin' && (
         <div>
           <h2 className="text-2xl font-bold mb-4 text-gray-800">Produits</h2>
-          <button onClick={() => setShowAddProduct(true)} className="mb-6 px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
-            Ajouter un produit
-          </button>
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <button onClick={() => setShowAddProduct(true)} className="mb-6 px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
+              Ajouter un produit
+            </button>
+
+            <select
+              value={stockFilter}
+              onChange={e => setStockFilter(e.target.value)}
+              className="border border-gray-300 px-3 py-2 rounded text-sm"
+            >
+              <option value="all">📦 Tous les produits</option>
+              <option value="rupture">🔴 Rupture de stock</option>
+              <option value="low">🟡 Stock faible (1–2)</option>
+              <option value="ok">⚪ Stock suffisant</option>
+            </select>
+
+            <div className="flex gap-3 text-sm font-medium">
+              <span className="flex items-center gap-1 text-red-700">
+                <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
+                Rupture ({ruptureStock})
+              </span>
+              <span className="flex items-center gap-1 text-yellow-700">
+                <span className="w-3 h-3 rounded-full bg-yellow-400 inline-block"></span>
+                Faible ({stockFaible})
+              </span>
+              <span className="flex items-center gap-1 text-gray-700">
+                <span className="w-3 h-3 rounded-full bg-gray-300 inline-block"></span>
+                OK ({stockOk})
+              </span>
+            </div>
+          </div>
 
           {showAddProduct && (
             <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
