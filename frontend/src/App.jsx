@@ -4,10 +4,7 @@ import {
   FaShoppingCart,
   FaTrash,
   FaCheck,
-  FaPlus,
-  FaTimes,
   FaEdit,
-  FaDownload,
   FaBox,
   FaCreditCard,
   FaSearch,
@@ -35,16 +32,17 @@ export default function App() {
   const [sales, setSales] = useState([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', stock: '', image: null });
+  const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null });
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editProduct, setEditProduct] = useState(null);
-  const [editedProduct, setEditedProduct] = useState({ name: '', price: '', stock: '', sku: '', image: null });
+  const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', sku: '', image: null });
 
   const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
 
   const loadProducts = async () => {
     const res = await axios.get('/api/products');
+    console.log("✅ Produits reçus du backend :", res.data)
     setProducts(res.data);
   };
 
@@ -68,7 +66,14 @@ export default function App() {
       if (found) {
         return prev.map(p => p.id === product.id ? { ...p, qty: p.qty + 1 } : p);
       }
-      return [...prev, { ...product, qty: 1 }];
+      return [...prev, {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        price: product.price,
+        buy_price: product.buy_price ?? 0, // ✅ obligatoire
+        qty: 1
+      }];
     });
   };
 
@@ -112,6 +117,7 @@ export default function App() {
     formData.append('name', newProduct.name);
     formData.append('sku', newProduct.sku);
     formData.append('price', newProduct.price);
+    formData.append('buy_price', newProduct.buy_price);
     formData.append('stock', newProduct.stock);
     if (newProduct.image) {
       formData.append('image', newProduct.image);
@@ -123,7 +129,7 @@ export default function App() {
 
     alert('Produit ajouté');
     setShowAddProduct(false);
-    setNewProduct({ name: '', sku: '', price: '', stock: '', image: null });
+    setNewProduct({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null });
     loadProducts();
   };
 
@@ -133,6 +139,7 @@ export default function App() {
       id: product.id,
       name: product.name,
       price: product.price,
+      buy_price: product.buy_price,
       stock: product.stock,
       sku: product.sku || '',
       image: null,
@@ -155,6 +162,7 @@ export default function App() {
     formData.append('name', editedProduct.name);
     formData.append('sku', editedProduct.sku);
     formData.append('price', editedProduct.price);
+    formData.append('buy_price', editedProduct.buy_price)
     formData.append('stock', editedProduct.stock);
     
     if (editedProduct.image instanceof File) {
@@ -223,8 +231,50 @@ export default function App() {
 
   const productChartData = Object.entries(productCount).map(([name, value]) => ({ name, value }));
 
+  const increaseQty = (id) => {
+    setCart(prev => prev.map(p => p.id === id ? {...p, qty: p.qty +1 } : p))
+  };
+
+  const decreaseQty = (id) => {
+    setCart(prev => {
+      return prev.flatMap(p => {
+        if (p.id === id) {
+          if (p.qty > 1) {
+            return { ...p, qty: p.qty - 1 };
+          } else {
+            return []; // Si quantité = 1 et on décrémente → supprimer
+          }
+        }
+        return p;
+      });
+    });
+  };
+
+  // Calcul des données des prix d'achat cumulé
+
+  const dailyTotals = {}; // { "date": { vente: X, achat: Y } }
+  sales.forEach((s) => {
+    const date = new Date(s.date).toLocaleDateString();
+    const items = typeof s.items === 'string' ? JSON.parse(s.items) : s.items;
+
+    if (!dailyTotals[date]) {
+      dailyTotals[date] = { vente: 0, achat: 0 };
+    }
+
+    items.forEach(item => {
+      dailyTotals[date].vente += item.price * item.qty;
+      dailyTotals[date].achat += (item.buy_price || 0) * item.qty; // buy_price doit être inclus dans l'objet cart
+      console.log('item',item);
+    });
+  });
+
+  const comparisonData = Object.entries(dailyTotals).map(([date, val]) => ({ date, ...val }));
+
+  console.log("📊 Données pour le graphique :", comparisonData);
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
+      <h2 className="text-2xl md:text-4xl font-bold text-gray-900">CAM'S FASHION</h2>
       <div className="mb-6 flex gap-3 justify-center">
         <button onClick={() => setView('pos')} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'pos' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
           <FaShoppingCart /> Caisse
@@ -247,14 +297,14 @@ export default function App() {
       </div>
 
       {['pos', 'admin'].includes(view) && (
-        <div className="mb-6 max-w-md mx-auto flex items-center gap-3">
+        <div className="mb-6 max-w-md mx-auto flex items-center gap-3 border border-gray-300 rounded px-3 py-2 bg-white">
           <FaSearch className="text-gray-500" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Rechercher par nom ou SKU"
-            className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className='flex-1 focus:outline-none'
           />
         </div>
       )}
@@ -292,8 +342,16 @@ export default function App() {
             <ul>
               {cart.map((p) => (
                 <li key={p.id} className="mb-3 flex justify-between items-center">
-                  <div>{p.name} x{p.qty} = FCFA{(p.qty * p.price).toFixed(2)}</div>
-                  <button onClick={() => removeFromCart(p.id)} className="text-red-600 hover:text-red-800" title="Supprimer du panier">
+                  <div className="flex-1">
+                    <div className="font-semibold">{p.name}</div>
+                    <div className="text-sm text-gray-600">
+                      <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">−</button>
+                      <span className="mx-2">{p.qty}</span>
+                      <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+</button>
+                      <span className="ml-4">= FCFA {(p.qty * p.price).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => removeFromCart(p.id)} className="text-red-600 hover:text-red-800 ml-2" title="Supprimer du panier">
                     <FaTrash />
                   </button>
                 </li>
@@ -330,6 +388,10 @@ export default function App() {
                 <input type="number" name="price" step="0.01" value={newProduct.price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
               </div>
               <div className="mb-4">
+                <label htmlFor="" className="bloc mb-1 font-medium text-gray-700">Prix d'achat (FCFA)</label>
+                <input type="number" name="buy_price" value={newProduct.buy_price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2" required/>
+              </div>
+              <div className="mb-4">
                 <label className="block mb-1 font-medium text-gray-700">Stock</label>
                 <input type="number" name="stock" value={newProduct.stock} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
               </div>
@@ -361,6 +423,10 @@ export default function App() {
               <div className="mb-4">
                 <label className="block mb-1 font-medium text-gray-700">Prix (FCFA)</label>
                 <input type="number" name="price" step="0.01" value={editedProduct.price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+              </div>
+              <div className="mb-4">
+                <label className="block mb-1 font-medium text-gray-700">Prix d'achat (FCFA)</label>
+                <input type="number" name="buy_price" step="0.01" value={editedProduct.buy_price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
               </div>
               <div className="mb-4">
                 <label className="block mb-1 font-medium text-gray-700">Stock</label>
@@ -496,19 +562,14 @@ export default function App() {
           <h2 className="text-2xl font-bold mb-6 text-gray-800">📊 Statistiques des Ventes</h2>
           <div className="max-w-4xl mx-auto bg-white rounded-xl shadow p-6 mb-2">
             <ResponsiveContainer width="100%" height={400}>
-              <BarChart
-                data={sales.map(s => ({
-                  name: new Date(s.date).toLocaleDateString(),
-                  total: s.total
-                }))}
-                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-              >
+              <BarChart data={comparisonData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis tickFormatter={v => `FCFA ${v}`} />
-                <Tooltip formatter={(value) => [`FCFA ${value}`, 'Total']} />
+                <XAxis dataKey="date" />
+                <YAxis tickFormatter={(v) => `FCFA ${v}`} />
+                <Tooltip formatter={(v) => `FCFA ${v}`} />
                 <Legend />
-                <Bar dataKey="total" fill="#4F46E5" name="Total des ventes" />
+                <Bar dataKey="vente" fill="#4F46E5" name="Vente" />
+                <Bar dataKey="achat" fill="#F97316" name="Achat" />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -1,5 +1,4 @@
-from email.mime import image
-from flask import Flask, jsonify, request, send_file, send_from_directory, Blueprint
+from flask import Flask, jsonify, request, send_file, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
@@ -12,7 +11,6 @@ app = Flask(__name__, static_folder='build', static_url_path='')
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pos.db'
 
-# Config upload images
 UPLOAD_FOLDER = os.path.join(app.root_path, 'build/static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -25,17 +23,18 @@ def allowed_file(filename):
 
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    sku = db.Column(db.String(80), unique=True, nullable=False)  # Nouveau champ sku
+    sku = db.Column(db.String(80), unique=True, nullable=False)
     name = db.Column(db.String(80), nullable=False)
     price = db.Column(db.Float, nullable=False)
+    buy_price = db.Column(db.Float, nullable=True)
     stock = db.Column(db.Integer, default=0)
-    image_url = db.Column(db.String(200))  # Champ image_url
+    image_url = db.Column(db.String(200))
 
 class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.DateTime, default=datetime.utcnow)
     total = db.Column(db.Float, nullable=False)
-    items = db.Column(db.Text, nullable=False)  # JSON string
+    items = db.Column(db.Text, nullable=False)
 
 @app.route('/api/products', methods=['GET'])
 def get_products():
@@ -45,40 +44,42 @@ def get_products():
         'sku': p.sku,
         'name': p.name,
         'price': p.price,
+        'buy_price': p.buy_price,
         'stock': p.stock,
         'imageUrl': p.image_url
     } for p in products])
 
 @app.route('/api/products', methods=['POST'])
 def add_product():
-    # On attend multipart/form-data
-    if 'image' in request.files:
-        image = request.files['image']
-    else:
-        image = None
-
+    image = request.files.get('image')
     sku = request.form.get('sku')
     name = request.form.get('name')
     price = request.form.get('price')
+    buy_price = request.form.get('buy_price')
     stock = request.form.get('stock')
 
-    if not sku or not name or not price or not stock:
-        return jsonify({'error': 'Champs sku, name, price et stock requis'}), 400
+    if not sku or not name or not price or not buy_price or not stock:
+        return jsonify({'error': 'Champs requis'}), 400
 
-    # Vérifier si SKU existe déjà
     if Product.query.filter_by(sku=sku).first():
         return jsonify({'error': 'SKU déjà utilisé'}), 400
 
     image_url = None
     if image and allowed_file(image.filename):
         filename = secure_filename(image.filename)
-        import time
-        filename = f"{int(time.time())}_{filename}"
+        filename = f"{int(datetime.now().timestamp())}_{filename}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         image.save(filepath)
         image_url = f"/static/uploads/{filename}"
 
-    product = Product(sku=sku, name=name, price=float(price), stock=int(stock), image_url=image_url)
+    product = Product(
+        sku=sku,
+        name=name,
+        price=float(price),
+        buy_price=float(buy_price),
+        stock=int(stock),
+        image_url=image_url
+    )
     db.session.add(product)
     db.session.commit()
 
@@ -87,6 +88,7 @@ def add_product():
         'sku': product.sku,
         'name': product.name,
         'price': product.price,
+        'buy_price': product.buy_price,
         'stock': product.stock,
         'imageUrl': product.image_url
     }), 201
@@ -94,40 +96,32 @@ def add_product():
 @app.route('/api/products/<int:id>', methods=['PUT'])
 def update_product(id):
     p = Product.query.get_or_404(id)
-
-    # Récupérer les données depuis un formulaire (multipart/form-data)
     sku = request.form.get('sku')
     name = request.form.get('name')
     price = request.form.get('price')
+    buy_price = request.form.get('buy_price')
     stock = request.form.get('stock')
 
-    # Vérification SKU si modifié
     if sku and sku != p.sku:
         if Product.query.filter_by(sku=sku).first():
             return jsonify({'error': 'SKU déjà utilisé'}), 400
         p.sku = sku
 
-    # Mise à jour des autres champs
-    if name:
-        p.name = name
-    if price:
-        p.price = float(price)
-    if stock:
-        p.stock = int(stock)
+    if name: p.name = name
+    if price: p.price = float(price)
+    if buy_price: p.buy_price = float(buy_price)
+    if stock: p.stock = int(stock)
 
-    # Gestion image si envoyée
     if 'image' in request.files:
-        image_file = request.files['image']
-        if image_file.filename != '':
-            # Sauvegarde du fichier (à adapter selon ton projet)
-            filename = secure_filename(image_file.filename)
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            image_file.save(image_path)
-            p.image_url = f"/static/uploads/{filename}"  # Assure-toi que Product a ce champ
+        image = request.files['image']
+        if image.filename:
+            filename = secure_filename(image.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            image.save(filepath)
+            p.image_url = f"/static/uploads/{filename}"
 
     db.session.commit()
     return jsonify({'message': 'Product updated'})
-
 
 @app.route('/api/products/<int:id>', methods=['DELETE'])
 def delete_product(id):
@@ -136,19 +130,18 @@ def delete_product(id):
     db.session.commit()
     return jsonify({'message': 'Product deleted'})
 
-# Nouveau endpoint pour rechercher par SKU
 @app.route('/api/products/search', methods=['GET'])
 def search_products():
     sku = request.args.get('sku', '').strip()
     if not sku:
         return jsonify([])
-
     products = Product.query.filter(Product.sku.like(f"%{sku}%")).all()
     return jsonify([{
         'id': p.id,
         'sku': p.sku,
         'name': p.name,
         'price': p.price,
+        'buy_price': p.buy_price,
         'stock': p.stock,
         'imageUrl': p.image_url
     } for p in products])
@@ -160,7 +153,7 @@ def record_sale():
     db.session.add(s)
     for item in data['cart']:
         product = Product.query.get(item['id'])
-        if product.stock >= item['qty']:
+        if product and product.stock >= item['qty']:
             product.stock -= item['qty']
     db.session.commit()
     return jsonify({'message': 'Sale recorded'})
@@ -179,7 +172,6 @@ def get_sales():
 def export_sales_csv():
     start_date = request.args.get('start')
     end_date = request.args.get('end')
-
     query = Sale.query
     if start_date:
         query = query.filter(Sale.date >= datetime.fromisoformat(start_date))
@@ -187,7 +179,6 @@ def export_sales_csv():
         query = query.filter(Sale.date <= datetime.fromisoformat(end_date))
 
     sales = query.order_by(Sale.date.desc()).all()
-
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['ID', 'Date', 'Total', 'Items'])
