@@ -38,6 +38,7 @@ export default function App() {
   const [editProduct, setEditProduct] = useState(null);
   const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', sku: '', image: null });
   const [stockFilter, setStockFilter] = useState('all');
+  const [aiResult, setAiResult] = useState("");
 
   const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
 
@@ -282,10 +283,15 @@ export default function App() {
   const stockFaible = products.filter(p => p.stock > 0 && p.stock <= 2).length;
   const stockOk = products.filter(p => p.stock > 2).length;
 
+  const analyserAvecIA = async () => {
+    const res = await axios.post('/api/ai/conseil', ventes);
+    alert("IA : " + res.data.response);
+  };
+
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen max-w-7xl mx-auto">
       <h2 className="text-2xl md:text-4xl font-bold text-gray-900">CAM'S FASHION</h2>
-      <div className="mb-6 flex gap-3 justify-center">
+      <div className="flex flex-wrap sm:flex-row gap-2 sm:gap-3 justify-center mb-6">
         <button onClick={() => setView('pos')} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'pos' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
           <FaShoppingCart /> Caisse
         </button>
@@ -304,6 +310,9 @@ export default function App() {
         >
           <FaChartBar /> Graphiques
         </button>
+        <button onClick={analyserAvecIA} className="bg-purple-600 text-white px-4 py-2 rounded">
+          🔮 Analyse IA
+        </button>
       </div>
 
       {['pos', 'admin'].includes(view) && (
@@ -320,14 +329,14 @@ export default function App() {
       )}
 
       {view === 'pos' && (
-        <div className="flex gap-6">
+        <div className="flex flex-col lg:flex-row gap-6 w-full">
           <div className="flex-1">
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Produits</h2>
-            <div className="grid grid-cols-2 gap-6 max-h-[650px] overflow-auto p-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredProducts.map((p) => (
                 <button key={p.id} onClick={() => addToCart(p)} className="bg-blue-600 text-white rounded-xl shadow flex" style={{ minHeight: '120px' }}>
                   {p.imageUrl && (
-                    <div className="w-1/2 p-2 flex items-center justify-center bg-white rounded-l-xl">
+                    <div className="w-1/2 p-1 flex items-center justify-center bg-white rounded-l-xl">
                       <img src={p.imageUrl} alt={p.name} className="max-w-full max-h-full object-contain rounded" />
                     </div>
                   )}
@@ -345,7 +354,7 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ width: '30vw', minWidth: '280px' }}>
+          <div className='w-full lg:w-[25vw] min-w-[280px]'>
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <FaShoppingCart /> Panier
             </h2>
@@ -423,7 +432,7 @@ export default function App() {
 
                 <h3 className="text-xl font-semibold mb-4">Ajouter un produit</h3>
 
-                <form onSubmit={submitNewProduct} className="mb-6 border p-6 rounded-xl max-w-md bg-white shadow">
+                <form onSubmit={submitNewProduct} className="w-full border p-4 sm:p-6 rounded-xl bg-white shadow">
                   <div className="mb-4">
                     <label className="block mb-1 font-medium text-gray-700">Nom</label>
                     <input type="text" name="name" value={newProduct.name} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
@@ -596,7 +605,7 @@ export default function App() {
                   </div>
 
                   {/* Tableau des articles */}
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto w-full">
                     <table className="min-w-full text-sm border border-gray-300 rounded-lg">
                       <thead className="bg-gray-100 text-gray-700">
                         <tr>
@@ -664,6 +673,11 @@ export default function App() {
               </PieChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      )}
+      {aiResult && (
+        <div className="mt-4 p-4 bg-white rounded shadow text-sm whitespace-pre-wrap">
+          {aiResult}
         </div>
       )}
     </div>

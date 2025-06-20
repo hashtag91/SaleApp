@@ -5,7 +5,10 @@ from datetime import datetime
 import csv
 import io
 import os
+import requests
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__, static_folder='build', static_url_path='')
 CORS(app)
@@ -188,6 +191,22 @@ def export_sales_csv():
 
     output.seek(0)
     return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='sales.csv')
+
+@app.route('/api/ai/analyse', methods=['POST'])
+def analyse_ventes():
+    data = request.get_json()
+
+    prompt = (
+        f"Voici un historique de ventes. Analyse les tendances, prévois les revenus probables, et conseille quels produits acheter et en quelle quantité :\n\n {data}"
+    )
+
+    response = requests.post("http://localhost:11434/api/generate", json={
+        "model": "mistral",
+        "messages": prompt,
+        "stream": False
+    })
+
+    return response.json()
 
 @app.route('/')
 def serve():
