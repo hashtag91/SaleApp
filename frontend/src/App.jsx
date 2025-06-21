@@ -8,7 +8,8 @@ import {
   FaBox,
   FaCreditCard,
   FaSearch,
-  FaChartBar
+  FaChartBar,
+  FaBars
 } from 'react-icons/fa';
 import {
   ResponsiveContainer,
@@ -23,6 +24,7 @@ import {
   Pie,
   Cell
 } from 'recharts';
+import soundFile from './assets/add.mp3'; // chemin relatif vers le fichier audio
 
 export default function App() {
   const [view, setView] = useState('pos');
@@ -39,6 +41,8 @@ export default function App() {
   const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', sku: '', image: null });
   const [stockFilter, setStockFilter] = useState('all');
   const [aiResult, setAiResult] = useState("");
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false); // drawer panier mobile
 
   const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
 
@@ -67,13 +71,16 @@ export default function App() {
       if (found) {
         return prev.map(p => p.id === product.id ? { ...p, qty: p.qty + 1 } : p);
       }
+      // joue le son
+      const audio = new Audio(soundFile);
+      audio.play();
       return [...prev, {
         id: product.id,
         name: product.name,
         sku: product.sku,
         price: product.price,
         buy_price: product.buy_price ?? 0, // ✅ obligatoire
-        qty: 1
+        qty: 1,
       }];
     });
   };
@@ -289,9 +296,51 @@ export default function App() {
   };
 
   return (
-    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen max-w-7xl mx-auto">
-      <h2 className="text-2xl md:text-4xl font-bold text-gray-900">CAM'S FASHION</h2>
-      <div className="flex flex-wrap sm:flex-row gap-2 sm:gap-3 justify-center mb-6">
+    <div className="p-4 sm:p-4 bg-gray-50 min-h-screen max-w-7xl mx-auto">
+      <div className="sticky top-0 p-4 bg-gray-50 w-100 mb-3 flex justify-between items-center">
+        <h2 className="text-2xl md:text-4xl font-bold text-gray-900">CAM'S FASHION</h2>
+        <button onClick={() => setMobileDrawerOpen(true)}className="sm:hidden flex items-center text-gray-700">
+          <FaBars />
+        </button>
+      </div>
+      {/* Overlay + Drawer Mobile */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-40"
+            onClick={() => setMobileDrawerOpen(false)}
+          ></div>
+
+          {/* Drawer */}
+          <div className="relative z-50 w-64 max-w-full bg-white shadow-lg h-full transform transition-transform duration-300 ease-in-out translate-x-0">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Menu</h3>
+              <button onClick={() => setMobileDrawerOpen(false)} className="text-gray-500 hover:text-black">
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-col p-4 gap-3">
+              <button onClick={() => { setView('pos'); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
+                <FaShoppingCart className="inline-block mr-1" /> Caisse
+              </button>
+              <button onClick={() => { setView('admin'); loadProducts(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
+                <FaBox className="inline-block mr-1" /> Produits
+              </button>
+              <button onClick={() => { setView('sales'); loadSales(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
+                <FaCreditCard className="inline-block mr-1" /> Ventes
+              </button>
+              <button onClick={() => { setView('charts'); loadSales(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
+                <FaChartBar className="inline-block mr-1" /> Graphiques
+              </button>
+              <button onClick={() => { analyserAvecIA(); setMobileDrawerOpen(false); }} className="bg-purple-600 text-white px-4 py-2 rounded">
+                🔮 Analyse IA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="hidden sm:flex flex-wrap flex-row gap-3 justify-center mb-6">
         <button onClick={() => setView('pos')} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'pos' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
           <FaShoppingCart /> Caisse
         </button>
@@ -316,7 +365,7 @@ export default function App() {
       </div>
 
       {['pos', 'admin'].includes(view) && (
-        <div className="mb-6 max-w-md mx-auto flex items-center gap-3 border border-gray-300 rounded px-3 py-2 bg-white">
+        <div className="sticky mb-6 max-w-md mx-auto flex items-center gap-3 border border-gray-300 rounded px-3 py-2 bg-white">
           <FaSearch className="text-gray-500" />
           <input
             type="text"
@@ -354,7 +403,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className='w-full lg:w-[25vw] min-w-[280px]'>
+          <div className="hidden sm:block" style={{ width: '30vw', minWidth: '280px' }}>
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <FaShoppingCart /> Panier
             </h2>
@@ -389,7 +438,7 @@ export default function App() {
         <div>
           <h2 className="text-2xl font-bold mb-4 text-gray-800">Produits</h2>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-            <button onClick={() => setShowAddProduct(true)} className="mb-6 px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
+            <button onClick={() => setShowAddProduct(true)} className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
               Ajouter un produit
             </button>
 
@@ -678,6 +727,57 @@ export default function App() {
       {aiResult && (
         <div className="mt-4 p-4 bg-white rounded shadow text-sm whitespace-pre-wrap">
           {aiResult}
+        </div>
+      )}
+      {/* Bouton panier mobile */}
+      <button onClick={() => setCartOpen(true)}
+        className="fixed bottom-4 right-4 bg-amber-600 border border-transparent text-center text-white text-lg text-slate-800 transition-all px-5 py-3 rounded-full shadow-lg sm:hidden z-50 flex-1 justify-center"
+        style={{width: '100px', height: '100px'}}>
+        <span className='flex justify-center'><FaShoppingCart className='text-xl'/></span>
+        <span>Panier ({cart.length})</span>
+      </button>
+      {cartOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end sm:hidden">
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-40"
+            onClick={() => setCartOpen(false)}
+          ></div>
+
+          {/* Drawer panier */}
+          <div className="relative z-50 w-80 max-w-full bg-white shadow-xl h-full p-4 overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <FaShoppingCart /> Panier
+              </h2>
+              <button onClick={() => setCartOpen(false)} className="text-gray-600 text-xl">✕</button>
+            </div>
+
+            <ul>
+              {cart.map((p) => (
+                <li key={p.id} className="mb-3 flex justify-between items-center">
+                  <div className="flex-1">
+                    <div className="font-semibold">{p.name}</div>
+                    <div className="text-sm text-gray-600">
+                      <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">−</button>
+                      <span className="mx-2">{p.qty}</span>
+                      <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+</button>
+                      <span className="ml-4">= FCFA {(p.qty * p.price).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => removeFromCart(p.id)} className="text-red-600 hover:text-red-800 ml-2">
+                    <FaTrash />
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <hr className="my-3" />
+            <div className="text-lg font-bold">Total : FCFA{total.toFixed(2)}</div>
+            <button onClick={checkout} className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2">
+              <FaCheck /> Valider la vente
+            </button>
+          </div>
         </div>
       )}
     </div>
