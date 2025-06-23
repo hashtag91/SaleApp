@@ -1,9 +1,11 @@
+from unittest import result
 from flask import Flask, jsonify, request, send_file, send_from_directory, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
 import csv
 import io
+import json
 import os
 import requests
 from werkzeug.utils import secure_filename
@@ -192,21 +194,35 @@ def export_sales_csv():
     output.seek(0)
     return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='sales.csv')
 
-@app.route('/api/ai/analyse', methods=['POST'])
-def analyse_ventes():
+@app.route('/api/ai/conseil', methods=['POST'])
+def conseil_ventes():
     data = request.get_json()
 
-    prompt = (
-        f"Voici un historique de ventes. Analyse les tendances, prévois les revenus probables, et conseille quels produits acheter et en quelle quantité :\n\n {data}"
-    )
+    if not data or len(data) == 0:
+        return jsonify({'response': "Aucune donnée de vente fournie."}), 400
 
-    response = requests.post("http://localhost:11434/api/generate", json={
-        "model": "mistral",
-        "messages": prompt,
-        "stream": False
-    })
+    prompt = f"Voici un historique de ventes sous forme JSON. Analyse les tendances, estime les revenus futurs, identifie les produits les plus populaires et donne des conseils précis sur les réapprovisionnements en français. {json.dumps(data)}"
 
-    return response.json()
+    try:
+        res = requests.post("http://localhost:11434/api/generate", json={
+            "model": "deepseek-r1:1.5b",
+            "prompt": prompt,
+            "stream": False
+        })
+
+        res.raise_for_status()
+        output = res.json()
+        print(output)
+        content = output.get('response', "Aucune réponse de l'IA.")
+        return jsonify({"response": content}), 200
+
+    except Exception as e:
+        print("Erreur IA:", e)
+        return jsonify({'response': "Erreur lors de l'analyse IA."}), 500
+    
+@app.route('/ping')
+def ping():
+    return jsonify({"pong": True})
 
 @app.route('/')
 def serve():

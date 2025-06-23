@@ -290,9 +290,27 @@ export default function App() {
   const stockFaible = products.filter(p => p.stock > 0 && p.stock <= 2).length;
   const stockOk = products.filter(p => p.stock > 2).length;
 
+  const [loadingAI, setLoadingAI] = useState(false);
+
   const analyserAvecIA = async () => {
-    const res = await axios.post('/api/ai/conseil', ventes);
-    alert("IA : " + res.data.response);
+    setLoadingAI(true);
+    try {
+      const resSales = await axios.get("/api/sales");
+      const ventes = resSales.data;
+
+      if (!ventes || ventes.length === 0) {
+        alert("Aucune vente à analyser.");
+        setLoadingAI(false);
+        return;
+      }
+
+      const res = await axios.post('/api/ai/conseil', ventes);
+      setAiResult("🔮 IA :\n" + res.data.response);
+    } catch (e) {
+      console.error("Erreur IA :", e);
+      setAiResult("Erreur IA lors de l’analyse.");
+    }
+    setLoadingAI(false);
   };
 
   return (
@@ -333,8 +351,11 @@ export default function App() {
               <button onClick={() => { setView('charts'); loadSales(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
                 <FaChartBar className="inline-block mr-1" /> Graphiques
               </button>
-              <button onClick={() => { analyserAvecIA(); setMobileDrawerOpen(false); }} className="bg-purple-600 text-white px-4 py-2 rounded">
-                🔮 Analyse IA
+              <button onClick={() => { 
+                analyserAvecIA; setMobileDrawerOpen(false); }}
+                disabled={loadingAI}
+                className="bg-purple-600 text-white px-4 py-2 rounded">
+                {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
               </button>
             </div>
           </div>
@@ -359,8 +380,11 @@ export default function App() {
         >
           <FaChartBar /> Graphiques
         </button>
-        <button onClick={analyserAvecIA} className="bg-purple-600 text-white px-4 py-2 rounded">
-          🔮 Analyse IA
+        <button 
+          onClick={analyserAvecIA} 
+          disabled={loadingAI}
+          className="bg-purple-600 text-white px-4 py-2 rounded">
+          {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
         </button>
       </div>
 
