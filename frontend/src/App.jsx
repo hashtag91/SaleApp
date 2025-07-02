@@ -9,7 +9,10 @@ import {
   FaCreditCard,
   FaSearch,
   FaChartBar,
-  FaBars
+  FaBars,
+  FaSignOutAlt,
+  FaUserCircle,
+  FaCog
 } from 'react-icons/fa';
 import {
   ResponsiveContainer,
@@ -25,13 +28,31 @@ import {
   Cell
 } from 'recharts';
 import soundFile from './assets/add.mp3'; // chemin relatif vers le fichier audio
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [showRegister, setShowRegister] = useState(false);
+
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  const [name, setName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [entreprise, setEntreprise] = useState('');
+  const [adress, setAdress] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [logo, setLogo] = useState(null);
+
   const [view, setView] = useState('pos');
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [total, setTotal] = useState(0);
   const [sales, setSales] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState({name: "", surname: "", username: "", phone: "", email: "", entreprise: "", adresse: "", logo: null,})
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null });
@@ -43,8 +64,57 @@ export default function App() {
   const [aiResult, setAiResult] = useState("");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false); // drawer panier mobile
+  const [generateInvoice, setGenerateInvoice] = useState(false);
+  const [clientName, setClientName] = useState('');
 
   const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await axios.post('/api/login', { username, password });
+      const me = await axios.get('/api/me');
+      setUser(me.data.user);
+      toast.success("Connexion réussie !");
+      loadProducts();
+    } catch (error) {
+      // On récupère le message d'erreur envoyé par Flask si dispo
+      console.error(error);
+      const message = error.response?.data?.error || "Échec de la connexion";
+      toast.error(message);
+    }
+  };
+
+  // Fonction pour la création de compte
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
+    formData.append('name', name);
+    formData.append('surname', surname);
+    formData.append('entreprise',entreprise);
+    formData.append('adress', adress);
+    formData.append('phone', phone);
+    formData.append('email', email);
+    if (logo) {
+      formData.append('logo', logo);
+    }
+    try {
+      await axios.post('/api/register', formData);
+      toast.success("Inscription réussie. Connectez-vous.");
+      setShowRegister(false);
+    }catch (err) {
+      toast.error(err.response?.data?.error || "Erreur lors de l'inscription");
+    }
+  };
+
+  const handleLogout = async () => {
+    await axios.post('/api/logout');
+    setUser(null);
+    setView('pos');  // ou une autre vue par défaut
+    toast.error("Déconnecté avec succès !");
+  };
 
   const loadProducts = async () => {
     const res = await axios.get('/api/products');
@@ -56,8 +126,66 @@ export default function App() {
     setSales(res.data);
   };
 
+  // Vérification automatique de session au démarrage
   useEffect(() => {
-    loadProducts();
+    axios.get('/api/me').then(res => {
+      if (res.data.user) {
+        setUser(res.data.user);
+        loadProducts();
+      }
+    });
+  }, []);
+
+  const settingsRetrieve = () => {
+    axios.get('/api/settings').then(res => {
+      setSettings(prev => ({
+        ...prev,
+        'name':res.data.name,
+        'surname':res.data.surname,
+        'username':res.data.username,
+        'phone':res.data.phone,
+        'email':res.data.email,
+        'entreprise':res.data.entreprise,
+        'adresse':res.data.adresse,
+        'logo':''
+      }));
+    }, ).catch((err) => toast.error(err.response?.data?.error || "Erreur lors du chargement des informations"));
+  }
+
+  const handleSettingsFieldChange = (e) => {
+    setSettings({...settings, [e.target.name]: e.target.value});
+  }
+
+  const handleSettingsLogoChange = (e) => {
+    setSettings({...settings, logo:e.target.files[0]});
+  }
+
+  const settingsSubmit = (e) => {
+    e.preventDefault();
+    const data = new FormData();
+
+    data.append("name", settings.name);
+    data.append("surname", settings.surname);
+    data.append("username", settings.username);
+    data.append("phone", settings.phone);
+    data.append("email", settings.email);
+    data.append("entreprise", settings.entreprise);
+    data.append("adresse", settings.adresse);
+    if(settings.logo) data.append("logo", settings.logo);
+
+    axios.post('/api/settings', data)
+    .then((res) => {
+      toast.success(res.data.message);
+    })
+    .catch ((err) => {
+      toast.error(err.data.error);
+    })
+  }
+
+  useEffect(() => {
+    if (user){
+      loadProducts();
+    }
   }, []);
 
   useEffect(() => {
@@ -89,16 +217,37 @@ export default function App() {
     setCart(prev => prev.filter(p => p.id !== id));
   };
 
+  const genererFacture = async () => {
+    const facture = {
+      'client':clientName,
+      'items': JSON.stringify(cart),
+      'total': total,
+    }
+    const res = await axios.post('/api/facture', facture, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `facture_${new Date().toISOString()}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+  }
+
   const checkout = async () => {
-    if (cart.length === 0) return alert("Panier vide !");
+    if (cart.length === 0) return toast.info("Panier vide !");
     const sale = {
       total,
       items: JSON.stringify(cart),
-      cart
+      cart,
+      generate_invoice: generateInvoice,
+      client: clientName
     };
     await axios.post('/api/sales', sale);
-    alert('Vente enregistrée');
+    if(generateInvoice){
+      genererFacture();
+    }
+    toast.success('Vente enregistrée');
     setCart([]);
+    setGenerateInvoice(false);
     loadProducts();
   };
 
@@ -118,7 +267,7 @@ export default function App() {
   const submitNewProduct = async (e) => {
     e.preventDefault();
     if (!newProduct.name || !newProduct.sku || !newProduct.price || !newProduct.stock) {
-      return alert("Remplissez tous les champs");
+      return toast.warning("Remplissez tous les champs");
     }
 
     const formData = new FormData();
@@ -135,7 +284,7 @@ export default function App() {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
 
-    alert('Produit ajouté');
+    toast.success('Produit ajouté');
     setShowAddProduct(false);
     setNewProduct({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null });
     loadProducts();
@@ -192,8 +341,9 @@ export default function App() {
       // Mettre à jour l'état local ici
       setProducts(products.map(p => p.id === updatedProduct.id ? updatedProduct : p));
       setEditProduct(null);
+      loadProducts();
     } catch (error) {
-      alert(error.message);
+      toast.error(error.message);
     }
   }
 
@@ -299,7 +449,7 @@ export default function App() {
       const ventes = resSales.data;
 
       if (!ventes || ventes.length === 0) {
-        alert("Aucune vente à analyser.");
+        toast.default("Aucune vente à analyser.");
         setLoadingAI(false);
         return;
       }
@@ -313,15 +463,157 @@ export default function App() {
     setLoadingAI(false);
   };
 
-  return (
-    <div className="p-4 sm:p-4 bg-gray-50 min-h-screen max-w-7xl mx-auto">
-      <div className="sticky top-0 p-4 bg-gray-50 w-100 mb-3 flex justify-between items-center">
-        <h2 className="text-2xl md:text-4xl font-bold text-gray-900">CAM'S FASHION</h2>
-        <button onClick={() => setMobileDrawerOpen(true)}className="sm:hidden flex items-center text-gray-700">
-          <FaBars />
-        </button>
+  if (!user){
+    return(
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <form
+          onSubmit={showRegister ? handleRegister : handleLogin}
+          className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4"
+        >
+          <h2 className="text-2xl font-bold text-center text-gray-800">
+            {showRegister ? "Inscription" : "Connexion"}
+          </h2>
+
+          {showRegister && (
+            <>
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">Prénom</label>
+                <input 
+                  type="text"
+                  name="name"
+                  id="name"
+                  placeholder="Nom"
+                  required
+                  onChange={(e) => setName(e.target.value)} 
+                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" 
+                />
+              </div>
+              <div>
+                <label htmlFor="surname" className="block text-sm font-medium text-gray-700">Nom</label>
+                <input 
+                  type="text"
+                  name="surname"
+                  id="surname"
+                  placeholder="Prénom" 
+                  required 
+                  onChange={(e) => setSurname(e.target.value)} 
+                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+              <div>
+                <label htmlFor="entreprise" className="block text-sm font-medium text-gray-700">Entreprise</label>
+                <input 
+                  type="text"
+                  name="entreprise"
+                  id="entreprise"
+                  placeholder="Nom de l'entreprise" 
+                  onChange={(e) => setEntreprise(e.target.value)} 
+                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+              <div>
+                <label htmlFor="adresse" className="block text-sm font-medium text-gray-700">Adresse</label>
+                <input 
+                  type="text"
+                  name="adresse"
+                  id="adresse"
+                  placeholder="Adresse de l'entreprise" 
+                  onChange={(e) => setAdress(e.target.value)} 
+                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+              <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Téléphone</label>
+                <input 
+                  type="text"
+                  name="phone"
+                  id="phone"
+                  placeholder="Téléphone" 
+                  required 
+                  onChange={(e) => setPhone(e.target.value)} 
+                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+                <input 
+                  type="email"
+                  name="email"
+                  id="email"
+                  placeholder="Email" 
+                  required 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+              <div className="mb-6">
+                <label className="block mb-1 font-medium text-gray-700">Logo</label>
+                <input type="file" name="logo" id='logo' accept="image/*" onChange={(e) => setLogo(e.target.files[0])} className="w-full" />
+              </div>
+            </>
+          )}
+          <div>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700">Nom d'utilisateur</label>
+            <input
+              type="text"
+              name="username"
+              id="username"
+              required
+              onChange={e => setUsername(e.target.value)}
+              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Mot de passe</label>
+            <input
+              type="password"
+              name="password"
+              id="password"
+              required
+              onChange={e => setPassword(e.target.value)}
+              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
+          >
+            Valider
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowRegister(!showRegister)}
+            className="w-full mt-2 text-indigo-600 hover:underline"
+          >
+            {showRegister ? "J'ai déjà un compte" : "Créer un compte"}
+          </button>
+        </form>
+        <ToastContainer />
       </div>
-      {/* Overlay + Drawer Mobile */}
+    )
+  }
+
+  return (
+    <div className="p-4 sm:p-4 bg-gray-50 min-h-screen mx-auto">
+      <div className="sticky top-0 p-4 bg-gray-50 w-100 mb-3 flex justify-between items-center">
+        <h2 className="text-2xl md:text-4xl font-bold text-gray-900">{user?.entreprise}</h2>
+        <div className="flex items-center space-x-3">
+          <FaUserCircle className="hidden sm:inline-flex text-2xl text-gray-700" />
+          <span className="font-medium hidden sm:inline-flex">{user?.name} {user?.surname}</span>
+          <button
+            onClick={() => {setView('settings'); setShowSettings(true); settingsRetrieve();}}
+            className='hidden sm:inline-flex'
+            type='button'>
+            <FaCog className="text-2xl text-gray-700"/>
+          </button>
+          <button onClick={() => setMobileDrawerOpen(true)}className="sm:hidden flex items-center text-gray-700">
+            <FaBars />
+          </button>
+          <button onClick={handleLogout}
+            className="hidden sm:inline-flex bg-red-600 text-white px-4 py-2 rounded ml-4">
+            <FaSignOutAlt />
+          </button>
+        </div>
+      </div>
+
+      {/* Le menu sur mobile */}
       {mobileDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           {/* Overlay */}
@@ -357,6 +649,19 @@ export default function App() {
                 className="bg-purple-600 text-white px-4 py-2 rounded">
                 {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
               </button>
+              <button
+                onClick={() => {setView('settings'); setMobileDrawerOpen(false); setShowSettings(true); settingsRetrieve();}}
+                className='bg-gray-600 text-white px-4 py-2 rounded'>
+                <FaCog className='inline-block mr-1'/>Parametres
+              </button>
+              <button onClick={handleLogout}
+                className='bg-red-600 text-white px-4 py-2 rounded'>
+                Deconnecter
+              </button>
+            </div>
+            <div className='flex'>
+              <FaUserCircle className="hidden sm:inline-flex text-2xl text-gray-700" />
+              <span className="font-medium hidden sm:inline-flex">{user?.name} {user?.surname}</span>
             </div>
           </div>
         </div>
@@ -405,7 +710,7 @@ export default function App() {
         <div className="flex flex-col lg:flex-row gap-6 w-full">
           <div className="flex-1">
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Produits</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3">
               {filteredProducts.map((p) => (
                 <button key={p.id} onClick={() => addToCart(p)} className="bg-blue-600 text-white rounded-xl shadow flex" style={{ minHeight: '120px' }}>
                   {p.imageUrl && (
@@ -451,6 +756,29 @@ export default function App() {
             </ul>
             <hr className="my-3" />
             <div className="text-lg font-bold">Total : FCFA{total.toFixed(2)}</div>
+            <div className="flex items-center gap-2 mt-4 flex-1">
+              <input
+                type="checkbox"
+                id="generateInvoice"
+                checked={generateInvoice}
+                onChange={(e) => setGenerateInvoice(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <label htmlFor="generateInvoice" className="text-sm text-gray-700">
+                Générer une facture PDF
+              </label>
+              {generateInvoice && (
+                <input
+                  type="text"
+                  placeholder="Nom du client"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  className="w-full border px-3 py-2 rounded"
+                  required
+                />
+              )}
+            </div>
+
             <button onClick={checkout} className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2">
               <FaCheck /> Valider la vente
             </button>
@@ -711,7 +1039,7 @@ export default function App() {
       {view === 'charts' && (
         <div>
           <h2 className="text-2xl font-bold mb-6 text-gray-800">📊 Statistiques des Ventes</h2>
-          <div className="max-w-4xl mx-auto bg-white rounded-xl shadow p-6 mb-2">
+          <div className="mx-auto bg-white rounded-xl shadow p-6 mb-2">
             <ResponsiveContainer width="100%" height={400}>
               <BarChart data={comparisonData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -738,7 +1066,7 @@ export default function App() {
                   fill="#8884d8"
                   label
                 >
-                  {productChartData.map((entry, index) => (
+                  {productChartData.map((_entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -746,6 +1074,113 @@ export default function App() {
               </PieChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      )}
+      {view === 'settings' && (
+        <div className='flex justify-center items-center'>
+          <form
+            onSubmit={settingsSubmit}
+            className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1"
+          >
+            <h2 className='text-center text-2xl font-bold'>Paramètres</h2>
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700">Prénom</label>
+              <input 
+                type="text"
+                name="name"
+                id="name"
+                value={settings.name}
+                placeholder="Nom"
+                required
+                onChange={handleSettingsFieldChange} 
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" 
+              />
+            </div>
+            <div>
+              <label htmlFor="surname" className="block text-sm font-medium text-gray-700">Nom</label>
+              <input 
+                type="text"
+                name="surname"
+                id="surname"
+                value={settings.surname}
+                placeholder="Prénom" 
+                required 
+                onChange={handleSettingsFieldChange} 
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+            <div>
+              <label htmlFor="entreprise" className="block text-sm font-medium text-gray-700">Entreprise</label>
+              <input 
+                type="text"
+                name="entreprise"
+                id="entreprise"
+                value={settings.entreprise}
+                placeholder="Nom de l'entreprise" 
+                onChange={handleSettingsFieldChange} 
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+            <div>
+              <label htmlFor="adresse" className="block text-sm font-medium text-gray-700">Adresse</label>
+              <input 
+                type="text"
+                name="adresse"
+                id="adresse"
+                value={settings.adresse}
+                placeholder="Adresse de l'entreprise" 
+                onChange={handleSettingsFieldChange} 
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+            <div>
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Téléphone</label>
+              <input 
+                type="text"
+                name="phone"
+                id="phone"
+                value={settings.phone}
+                placeholder="Téléphone" 
+                required 
+                onChange={handleSettingsFieldChange} 
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+              <input 
+                type="email"
+                name="email"
+                id="email"
+                value={settings.email}
+                placeholder="Email" 
+                required 
+                onChange={handleSettingsFieldChange} 
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+            <div className="mb-6">
+              <label className="block mb-1 font-medium text-gray-700">Logo</label>
+              <input type="file" name="logo" id='logo' accept="image/*" onChange={handleSettingsLogoChange} className="w-full" />
+            </div>
+            <div>
+              <label 
+              htmlFor="username" 
+              className="block text-sm font-medium text-gray-700">
+                Nom d'utilisateur
+              </label>
+              <input
+                type="text"
+                name="username"
+                id="username"
+                value={settings.username}
+                required
+                onChange={handleSettingsFieldChange}
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
+            >
+              Enregistrer
+            </button>
+          </form>
         </div>
       )}
       {aiResult && (
@@ -798,12 +1233,35 @@ export default function App() {
 
             <hr className="my-3" />
             <div className="text-lg font-bold">Total : FCFA{total.toFixed(2)}</div>
+            <div className="flex items-center gap-2 mt-4">
+              <input
+                type="checkbox"
+                id="generateInvoice"
+                checked={generateInvoice}
+                onChange={(e) => setGenerateInvoice(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <label htmlFor="generateInvoice" className="text-sm text-gray-700">
+                Générer une facture PDF
+              </label>
+              {generateInvoice && (
+                <input
+                  type="text"
+                  placeholder="Nom du client"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  className="w-full border px-3 py-2 rounded"
+                  required
+                />
+              )}
+            </div>
             <button onClick={checkout} className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2">
               <FaCheck /> Valider la vente
             </button>
           </div>
         </div>
       )}
+      <ToastContainer />
     </div>
   );
 }
