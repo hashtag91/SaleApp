@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+axios.defaults.withCredentials = true; // 🔐 envoie cookies sessions automatiquement
 import {
   FaShoppingCart,
   FaTrash,
@@ -12,7 +13,12 @@ import {
   FaBars,
   FaSignOutAlt,
   FaUserCircle,
-  FaCog
+  FaCog,
+  FaUser,
+  FaUsers,
+  FaInfo,
+  FaUserPlus,
+  FaWindowClose
 } from 'react-icons/fa';
 import {
   ResponsiveContainer,
@@ -32,6 +38,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 export default function App() {
+  const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
   const [user, setUser] = useState(null);
   const [showRegister, setShowRegister] = useState(false);
 
@@ -46,13 +53,21 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [logo, setLogo] = useState(null);
 
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isValidPhone = (phone) => /^[0-9]{8,15}$/.test(phone);
+  const isValidUsername = (username) => /^[a-zA-Z0-9_]{4,}$/.test(username);
+  const isValidPassword = (password) => password.length >= 6;
+
+  const [employeesFormData, setEmployeesFormData] = useState({name: "", surname: "", username: "", password:"", phone: "", email: "", adresse: "", role:'autres'})
+
   const [view, setView] = useState('pos');
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [total, setTotal] = useState(0);
   const [sales, setSales] = useState([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [settings, setSettings] = useState({name: "", surname: "", username: "", phone: "", email: "", entreprise: "", adresse: "", logo: null,})
+  const [employeeForm, setEmployeeForm] = useState(false)
+  const [settingsMe, setSettingsMe] = useState({name: "", surname: "", username: "", phone: "", email: "", entreprise: "", adresse: "", logo: null, role:''})
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null });
@@ -65,7 +80,11 @@ export default function App() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false); // drawer panier mobile
   const [generateInvoice, setGenerateInvoice] = useState(false);
+  const [isLoadingFacture, setIsLoadingFacture] = useState(false);
   const [clientName, setClientName] = useState('');
+  const [settingsSelectedMenu, setSettingsSelectedMenu] = useState('informations');
+  const [subUsers, setSubUsers] = useState([]);
+  const [subUsersFiltered, setSubUsersFiltered] = useState(subUsers);
 
   const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
 
@@ -88,6 +107,11 @@ export default function App() {
   // Fonction pour la création de compte
   const handleRegister = async (e) => {
     e.preventDefault();
+    if (!isValidUsername(username)) return toast.error("Nom d'utilisateur invalide (min 4 caractères).");
+    if (!isValidPassword(password)) return toast.error("Mot de passe trop court (min 6).");
+    if (!isValidEmail(email)) return toast.error("Email invalide.");
+    if (!isValidPhone(phone)) return toast.error("Numéro invalide.");
+
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
@@ -109,6 +133,27 @@ export default function App() {
     }
   };
 
+  const employeesFormSubmit = async (e) => {
+    e.preventDefault();
+    const { name, surname, username, password, phone, email } = employeesFormData;
+    if (!isValidUsername(username)) return toast.error("Nom utilisateur invalide.");
+    if (!isValidPassword(password)) return toast.error("Mot de passe trop court.");
+    if (!isValidEmail(email)) return toast.error("Email invalide.");
+    if (!isValidPhone(phone)) return toast.error("Téléphone invalide.");
+
+    const formData = new FormData();
+    Object.entries(employeesFormData).forEach(([key, val]) => formData.append(key, val));
+
+    try {
+      await axios.post('/api/employees', formData);
+      toast.success("Utilisateur ajouté !");
+      setEmployeeForm(false);
+      loadSubUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Erreur lors de l'ajout");
+    }
+  }
+
   const handleLogout = async () => {
     await axios.post('/api/logout');
     setUser(null);
@@ -128,17 +173,25 @@ export default function App() {
 
   // Vérification automatique de session au démarrage
   useEffect(() => {
-    axios.get('/api/me').then(res => {
-      if (res.data.user) {
-        setUser(res.data.user);
-        loadProducts();
-      }
-    });
+    axios.get('/api/me')
+      .then(res => {
+        if (res.data.user) {
+          setUser(res.data.user);
+          loadProducts();
+          loadSubUsers();
+        } else {
+          handleLogout();
+        }
+      })
+      .catch((err) => {
+        toast.error("Erreur session expirée", err);
+        handleLogout();
+      });
   }, []);
 
   const settingsRetrieve = () => {
     axios.get('/api/settings').then(res => {
-      setSettings(prev => ({
+      setSettingsMe(prev => ({
         ...prev,
         'name':res.data.name,
         'surname':res.data.surname,
@@ -153,25 +206,25 @@ export default function App() {
   }
 
   const handleSettingsFieldChange = (e) => {
-    setSettings({...settings, [e.target.name]: e.target.value});
+    setSettingsMe({...settingsMe, [e.target.name]: e.target.value});
   }
 
   const handleSettingsLogoChange = (e) => {
-    setSettings({...settings, logo:e.target.files[0]});
+    setSettingsMe({...settingsMe, logo:e.target.files[0]});
   }
 
   const settingsSubmit = (e) => {
     e.preventDefault();
     const data = new FormData();
 
-    data.append("name", settings.name);
-    data.append("surname", settings.surname);
-    data.append("username", settings.username);
-    data.append("phone", settings.phone);
-    data.append("email", settings.email);
-    data.append("entreprise", settings.entreprise);
-    data.append("adresse", settings.adresse);
-    if(settings.logo) data.append("logo", settings.logo);
+    data.append("name", settingsMe.name);
+    data.append("surname", settingsMe.surname);
+    data.append("username", settingsMe.username);
+    data.append("phone", settingsMe.phone);
+    data.append("email", settingsMe.email);
+    data.append("entreprise", settingsMe.entreprise);
+    data.append("adresse", settingsMe.adresse);
+    if(settingsMe.logo) data.append("logo", settingsMe.logo);
 
     axios.post('/api/settings', data)
     .then((res) => {
@@ -182,10 +235,16 @@ export default function App() {
     })
   }
 
+  const loadSubUsers = async () => {
+    const res = await axios.get('/api/employees');
+    setSubUsers(res.data)
+  }
+
   useEffect(() => {
     if (user){
       loadProducts();
-    }
+      loadSubUsers();
+    };
   }, []);
 
   useEffect(() => {
@@ -218,19 +277,27 @@ export default function App() {
   };
 
   const genererFacture = async () => {
-    const facture = {
-      'client':clientName,
-      'items': JSON.stringify(cart),
-      'total': total,
+    setIsLoadingFacture(true);
+    try {
+      const facture = {
+        'client': clientName,
+        'items': JSON.stringify(cart),
+        'total': total,
+      };
+      const res = await axios.post('/api/facture', facture, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `facture_${new Date().toISOString()}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+    } catch (err) {
+      toast.error("Erreur génération facture");
+      console.error(err);
+    } finally {
+      setIsLoadingFacture(false);
     }
-    const res = await axios.post('/api/facture', facture, { responseType: 'blob' });
-    const url = window.URL.createObjectURL(new Blob([res.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `facture_${new Date().toISOString()}.pdf`);
-    document.body.appendChild(link);
-    link.click();
-  }
+  };
 
   const checkout = async () => {
     if (cart.length === 0) return toast.info("Panier vide !");
@@ -241,14 +308,19 @@ export default function App() {
       generate_invoice: generateInvoice,
       client: clientName
     };
-    await axios.post('/api/sales', sale);
-    if(generateInvoice){
-      genererFacture();
+    try {
+      await axios.post('/api/sales', sale);
+      if (generateInvoice) await genererFacture();
+      toast.success('Vente enregistrée');
+      setCart([]);
+      setGenerateInvoice(false);
+      loadProducts();
+    } catch (err) {
+      console.error("Erreur checkout:", err);
+      toast.error("Erreur pendant la vente");
+    } finally {
+      setIsLoadingCheckout(false);
     }
-    toast.success('Vente enregistrée');
-    setCart([]);
-    setGenerateInvoice(false);
-    loadProducts();
   };
 
   const handleAddProduct = () => {
@@ -266,19 +338,15 @@ export default function App() {
 
   const submitNewProduct = async (e) => {
     e.preventDefault();
-    if (!newProduct.name || !newProduct.sku || !newProduct.price || !newProduct.stock) {
-      return toast.warning("Remplissez tous les champs");
-    }
+    const { name, sku, price, stock } = newProduct;
+    if (!name || !sku || !price || !stock) return toast.warning("Tous les champs sont requis.");
+    if (isNaN(price) || price <= 0) return toast.warning("Prix invalide");
+    if (isNaN(stock) || stock < 0) return toast.warning("Stock invalide");
 
     const formData = new FormData();
-    formData.append('name', newProduct.name);
-    formData.append('sku', newProduct.sku);
-    formData.append('price', newProduct.price);
-    formData.append('buy_price', newProduct.buy_price);
-    formData.append('stock', newProduct.stock);
-    if (newProduct.image) {
-      formData.append('image', newProduct.image);
-    }
+    Object.entries(newProduct).forEach(([key, val]) => {
+      if (val) formData.append(key, val);
+    });
 
     await axios.post('/api/products', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
@@ -315,30 +383,24 @@ export default function App() {
   async function submitEditProduct(e) {
     e.preventDefault();
 
+    const { name, sku, price, stock, buy_price } = editedProduct;
+    if (!name || !sku || !price || !stock) return toast.warning("Champs manquants.");
+    if (isNaN(price) || price <= 0 || isNaN(stock) || stock < 0) return toast.warning("Prix ou stock invalide");
+
     const formData = new FormData();
-    formData.append('name', editedProduct.name);
-    formData.append('sku', editedProduct.sku);
-    formData.append('price', editedProduct.price);
-    formData.append('buy_price', editedProduct.buy_price)
-    formData.append('stock', editedProduct.stock);
-    
-    if (editedProduct.image instanceof File) {
-      formData.append('image', editedProduct.image);
-    }
+    Object.entries(editedProduct).forEach(([key, val]) => {
+      if (key === 'image' && val instanceof File) formData.append(key, val);
+      else if (key !== 'id') formData.append(key, val);
+    });
 
     try {
       const response = await fetch(`/api/products/${editedProduct.id}`, {
         method: 'PUT',
-        body: formData, // important : on envoie FormData, pas JSON
-        // Pas besoin de Content-Type, fetch la gère automatiquement
+        body: formData,
       });
-
-      if (!response.ok) {
-        throw new Error('Erreur lors de la modification du produit');
-      }
+      if (!response.ok) throw new Error('Erreur lors de la modification');
 
       const updatedProduct = await response.json();
-      // Mettre à jour l'état local ici
       setProducts(products.map(p => p.id === updatedProduct.id ? updatedProduct : p));
       setEditProduct(null);
       loadProducts();
@@ -462,6 +524,24 @@ export default function App() {
     }
     setLoadingAI(false);
   };
+
+  {/*A changer et aussi le setSubUsers dans useEffect*/}
+  const filteredSubUsers = (e) => {
+    const query = e.target.value.trim().toLowerCase();
+      setSubUsersFiltered(
+        query === ''
+        ? subUsers
+        : subUsers.filter(u =>
+          u.name.toLowerCase().includes(query) ||
+          u.email.toLowerCase().includes(query)
+        )
+      )
+  } 
+
+  useEffect(() => {
+    setSubUsersFiltered(subUsers);
+  }, [subUsers]);
+
 
   if (!user){
     return(
@@ -592,7 +672,7 @@ export default function App() {
 
   return (
     <div className="p-4 sm:p-4 bg-gray-50 min-h-screen mx-auto">
-      <div className="sticky top-0 p-4 bg-gray-50 w-100 mb-3 flex justify-between items-center">
+      <div className="sticky top-0 p-4 bg-gray-50 w-100 mb-3 flex justify-between items-center z-100">
         <h2 className="text-2xl md:text-4xl font-bold text-gray-900">{user?.entreprise}</h2>
         <div className="flex items-center space-x-3">
           <FaUserCircle className="hidden sm:inline-flex text-2xl text-gray-700" />
@@ -640,15 +720,19 @@ export default function App() {
               <button onClick={() => { setView('sales'); loadSales(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
                 <FaCreditCard className="inline-block mr-1" /> Ventes
               </button>
-              <button onClick={() => { setView('charts'); loadSales(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-                <FaChartBar className="inline-block mr-1" /> Graphiques
-              </button>
-              <button onClick={() => { 
-                analyserAvecIA; setMobileDrawerOpen(false); }}
-                disabled={loadingAI}
-                className="bg-purple-600 text-white px-4 py-2 rounded">
-                {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
-              </button>
+              {user.role === 'admin' && 
+                <button onClick={() => { setView('charts'); loadSales(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
+                  <FaChartBar className="inline-block mr-1" /> Graphiques
+                </button>
+              }
+              {user.role === 'admin' &&
+                <button onClick={() => { 
+                  analyserAvecIA; setMobileDrawerOpen(false); }}
+                  disabled={loadingAI}
+                  className="bg-purple-600 text-white px-4 py-2 rounded">
+                  {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
+                </button>
+              }
               <button
                 onClick={() => {setView('settings'); setMobileDrawerOpen(false); setShowSettings(true); settingsRetrieve();}}
                 className='bg-gray-600 text-white px-4 py-2 rounded'>
@@ -676,21 +760,25 @@ export default function App() {
         <button onClick={() => { setView('sales'); loadSales(); }} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'sales' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
           <FaCreditCard /> Ventes
         </button>
-        <button
-          onClick={() => {
-            setView('charts');
-            loadSales();
-          }}
-          className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'charts' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}
-        >
-          <FaChartBar /> Graphiques
-        </button>
-        <button 
-          onClick={analyserAvecIA} 
-          disabled={loadingAI}
-          className="bg-purple-600 text-white px-4 py-2 rounded">
-          {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
-        </button>
+        {user.role === 'admin' && 
+          <button
+            onClick={() => {
+              setView('charts');
+              loadSales();
+            }}
+            className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'charts' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}
+          >
+            <FaChartBar /> Graphiques
+          </button>
+        }
+        {user.role === 'admin' && 
+          <button 
+            onClick={analyserAvecIA} 
+            disabled={loadingAI}
+            className="bg-purple-600 text-white px-4 py-2 rounded">
+            {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
+          </button>
+        }
       </div>
 
       {['pos', 'admin'].includes(view) && (
@@ -790,10 +878,11 @@ export default function App() {
         <div>
           <h2 className="text-2xl font-bold mb-4 text-gray-800">Produits</h2>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-            <button onClick={() => setShowAddProduct(true)} className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
-              Ajouter un produit
-            </button>
-
+            {user.role === 'admin' &&
+              <button onClick={() => setShowAddProduct(true)} className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
+                Ajouter un produit
+              </button>
+            }
             <select
               value={stockFilter}
               onChange={e => setStockFilter(e.target.value)}
@@ -941,14 +1030,16 @@ export default function App() {
                   <p className="text-indigo-600 font-bold">FCFA{p.price}</p>
                   <p className="text-gray-600">Stock: {p.stock}</p>
                 </div>
-                <div className="flex gap-4">
-                  <button onClick={() => handleEditProduct(p)} className="text-yellow-600 hover:text-yellow-800 font-semibold">
-                    <FaEdit />
-                  </button>
-                  <button onClick={() => handleDeleteProduct(p.id)} className="text-red-600 hover:text-red-800 font-semibold">
-                    <FaTrash />
-                  </button>
-                </div>
+                {user.role === 'admin' && 
+                  <div className="flex gap-4">
+                    <button onClick={() => handleEditProduct(p)} className="text-yellow-600 hover:text-yellow-800 font-semibold">
+                      <FaEdit />
+                    </button>
+                    <button onClick={() => handleDeleteProduct(p.id)} className="text-red-600 hover:text-red-800 font-semibold">
+                      <FaTrash />
+                    </button>
+                  </div>
+                }
               </li>
             ))}
           </ul>
@@ -990,6 +1081,7 @@ export default function App() {
                 items = typeof s.items === 'string' ? JSON.parse(s.items) : s.items;
               } catch (e) {
                 console.error('Erreur parsing items:', e);
+                items = [];
               }
 
               return (
@@ -998,6 +1090,7 @@ export default function App() {
                     <div>
                       <h3 className="text-lg font-semibold text-gray-800">🧾 Vente #{s.id}</h3>
                       <p className="text-sm text-gray-500">{new Date(s.date).toLocaleString()}</p>
+                      <p className="text-sm text-gray-500">Vendeur: <strong>{s.seller}</strong></p>
                     </div>
                     <div className="text-right">
                       <span className="text-sm text-gray-500">Total</span>
@@ -1077,110 +1170,456 @@ export default function App() {
         </div>
       )}
       {view === 'settings' && (
-        <div className='flex justify-center items-center'>
-          <form
-            onSubmit={settingsSubmit}
-            className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1"
-          >
-            <h2 className='text-center text-2xl font-bold'>Paramètres</h2>
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">Prénom</label>
-              <input 
-                type="text"
-                name="name"
-                id="name"
-                value={settings.name}
-                placeholder="Nom"
-                required
-                onChange={handleSettingsFieldChange} 
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" 
-              />
+        <div className="flex-grow relative">
+          <h2 className="text-center font-2xl font-bold mb-2">Paramètres</h2>
+          <div className="flex-grow flex pb-20">
+            <div className="flex-grow flex justify-center items-center">
+              {settingsSelectedMenu === 'informations' && (
+                <form 
+                  onSubmit={settingsSubmit}
+                  className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1"
+                >
+                  <h2 className="text-center text-1xl font-bold">
+                    Mes informations
+                  </h2>
+                  <div>
+                    <label
+                      htmlFor="name"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Nom
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      id="name"
+                      placeholder="Nom"
+                      required
+                      onChange={(e) => {handleSettingsFieldChange(e)}}
+                      value={settingsMe.name}
+                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="surname"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Prénom
+                    </label>
+                    <input
+                      type="text"
+                      name="surname"
+                      id="surname"
+                      placeholder="Prénom"
+                      required
+                      onChange={(e) => {handleSettingsFieldChange(e)}}
+                      value={settingsMe.surname}
+                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="entreprise"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Entreprise
+                    </label>
+                    <input
+                      type="text"
+                      name="entreprise"
+                      id="entreprise"
+                      placeholder="Nom de l'entreprise"
+                      disabled={user.role !== 'admin'}
+                      onChange={(e) => {handleSettingsFieldChange(e)}}
+                      value={settingsMe.entreprise}
+                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="adresse"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Adresse
+                    </label>
+                    <input
+                      type="text"
+                      name="adresse"
+                      id="adresse"
+                      placeholder="Adresse de l'entreprise"
+                      onChange={(e) => {handleSettingsFieldChange(e)}}
+                      value={settingsMe.adresse}
+                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="phone"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Téléphone
+                    </label>
+                    <input
+                      type="text"
+                      name="phone"
+                      id="phone"
+                      placeholder="Téléphone"
+                      required
+                      onChange={(e) => {handleSettingsFieldChange(e)}}
+                      value={settingsMe.phone}
+                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="email"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      id="email"
+                      placeholder="Email"
+                      required
+                      onChange={(e) => {handleSettingsFieldChange(e)}}
+                      value={settingsMe.email}
+                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  {user.role === 'admin' &&
+                    <div className="mb-6">
+                      <label className="block mb-1 font-medium text-gray-700">
+                        Logo
+                      </label>
+                      <input
+                        type="file"
+                        name="logo"
+                        id="logo"
+                        accept="image/*"
+                        className="w-full"
+                        onChange={(e) => {handleSettingsLogoChange(e)}}
+                      />
+                    </div>
+                  }
+                  <div>
+                    <label
+                      htmlFor="username"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Nom d'utilisateur
+                    </label>
+                    <input
+                      type="text"
+                      name="username"
+                      id="username"
+                      required
+                      onChange={(e) => {handleSettingsFieldChange(e)}}
+                      value={settingsMe.username}
+                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
+                  >
+                    Enregistrer
+                  </button>
+                  <button 
+                    type="button"
+                    className="w-full text-blue-700"
+                  >
+                    Changer mon mot de passe
+                  </button>
+                </form>
+              )}
+              {settingsSelectedMenu === 'utilisateurs' && (
+                <>
+                  <div className='flex flex-col'>
+                    <h1 className="text-3xl font-bold mb-6 text-gray-800 text-center">Gestion des utilisateurs</h1>
+
+                    <div className="flex justify-end gap-4 mb-6">
+                      <div className="relative flex-1">
+                        <FaSearch className="absolute left-3 top-3 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Rechercher par nom ou email"
+                          onChange={(e) => filteredSubUsers(e)}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
+                      </div>
+
+                      <button 
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                        onClick={() => setEmployeeForm(true)}
+                      >
+                        <FaUserPlus /> Ajouter
+                      </button>
+                    </div>
+
+                    <div className='flex justify-center items-center mb-2'>
+                      {employeeForm && 
+                        <form 
+                          className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1"
+                          onSubmit={employeesFormSubmit}
+                        >
+                          <div className='flex justify-end items-center'>
+                            <button 
+                              type="button"
+                              onClick={() => setEmployeeForm(false)}
+                            >
+                              <FaWindowClose className='text-red-500'/>
+                            </button>
+                          </div>
+                          <h2 className="text-center text-1xl font-bold">
+                            Ajout un employé
+                          </h2>
+                          <div>
+                            <label
+                              htmlFor="name"
+                              className="block text-sm font-medium text-gray-700"
+                            >
+                              Nom
+                            </label>
+                            <input
+                              type="text"
+                              name="name"
+                              id="name"
+                              placeholder="Nom"
+                              required
+                              onChange={(e) => setEmployeesFormData({...employeesFormData, name: e.target.value})}
+                              value={employeesFormData.name}
+                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="surname"
+                              className="block text-sm font-medium text-gray-700"
+                            >
+                              Prénom
+                            </label>
+                            <input
+                              type="text"
+                              name="surname"
+                              id="surname"
+                              placeholder="Prénom"
+                              required
+                              onChange={(e) => setEmployeesFormData({...employeesFormData, surname: e.target.value})}
+                              value={employeesFormData.surname}
+                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="adresse"
+                              className="block text-sm font-medium text-gray-700"
+                            >
+                              Adresse
+                            </label>
+                            <input
+                              type="text"
+                              name="adresse"
+                              id="adresse"
+                              placeholder="Adresse de l'entreprise"
+                              onChange={(e) => setEmployeesFormData({...employeesFormData, adresse: e.target.value})}
+                              value={employeesFormData.adresse}
+                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="phone"
+                              className="block text-sm font-medium text-gray-700"
+                            >
+                              Téléphone
+                            </label>
+                            <input
+                              type="text"
+                              name="phone"
+                              id="phone"
+                              placeholder="Téléphone"
+                              required
+                              onChange={(e) => setEmployeesFormData({...employeesFormData, phone: e.target.value})}
+                              value={employeesFormData.phone}
+                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="email"
+                              className="block text-sm font-medium text-gray-700"
+                            >
+                              Email
+                            </label>
+                            <input
+                              type="email"
+                              name="email"
+                              id="email"
+                              placeholder="Email"
+                              required
+                              onChange={(e) => setEmployeesFormData({...employeesFormData, email: e.target.value})}
+                              value={employeesFormData.email}
+                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="username"
+                              className="block text-sm font-medium text-gray-700"
+                            >
+                              Nom d'utilisateur
+                            </label>
+                            <input
+                              type="text"
+                              name="username"
+                              id="username"
+                              required
+                              onChange={(e) => setEmployeesFormData({...employeesFormData, username: e.target.value})}
+                              value={employeesFormData.username}
+                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor='role' className="block text-sm font-medium text-gray-700">Role</label>
+                            <select 
+                              name="role" 
+                              id="role" 
+                              className='mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500'
+                              onChange={(e) => setEmployeesFormData({...employeesFormData, role: e.target.value})}
+                            >
+                              <option value="admin">Admin</option>
+                              <option value="autres">Autres</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="password"
+                              className="block text-sm font-medium text-gray-700"
+                            >
+                              Mot de passe
+                            </label>
+                            <input
+                              type="password"
+                              name="password"
+                              id="password"
+                              required
+                              onChange={(e) => setEmployeesFormData({...employeesFormData, password: e.target.value})}
+                              value={employeesFormData.password}
+                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
+                          >
+                            Enregistrer
+                          </button>
+                          <button 
+                            type="button"
+                            className="w-full text-blue-700"
+                          >
+                            Changer mon mot de passe
+                          </button>
+                        </form>
+                      }
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow overflow-hidden">
+                      <table className="w-full table-auto">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="text-left px-4 py-3">Nom</th>
+                            <th className="text-left px-4 py-3">Prenom</th>
+                            <th className="text-left px-4 py-3">Username</th>
+                            <th className="text-left px-4 py-3">Phone</th>
+                            <th className="text-left px-4 py-3">Email</th>
+                            <th className="text-left px-4 py-3">Adresse</th>
+                            <th className="text-left px-4 py-3">Rôle</th>
+                            <th className="text-right px-4 py-3">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {subUsersFiltered.length === 0 ? (
+                            <tr>
+                              <td colSpan="4" className="text-center py-6 text-gray-500">
+                                Aucun utilisateur trouvé.
+                              </td>
+                            </tr>
+                          ) : (
+                            subUsersFiltered.map(subUser => (
+                              <tr key={subUser.id} className="border-t">
+                                <td className="px-4 py-3">{subUser.name}</td>
+                                <td className="px-4 py-3">{subUser.surname}</td>
+                                <td className="px-4 py-3">{subUser.username}</td>
+                                <td className="px-4 py-3">{subUser.phone}</td>
+                                <td className="px-4 py-3">{subUser.email}</td>
+                                <td className="px-4 py-3">{subUser.adresse}</td>
+                                <td className="px-4 py-3">{subUser.role}</td>
+                                <td className="px-4 py-3 text-right space-x-3">
+                                  <button className="text-yellow-600 hover:text-yellow-800">
+                                    <FaEdit />
+                                  </button>
+                                  <button className="text-red-600 hover:text-red-800">
+                                    <FaTrash />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+              {settingsSelectedMenu === 'apropos' && (
+                <h1 className="text-2xl font-bold">A Propos</h1>
+              )}
             </div>
-            <div>
-              <label htmlFor="surname" className="block text-sm font-medium text-gray-700">Nom</label>
-              <input 
-                type="text"
-                name="surname"
-                id="surname"
-                value={settings.surname}
-                placeholder="Prénom" 
-                required 
-                onChange={handleSettingsFieldChange} 
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-            </div>
-            <div>
-              <label htmlFor="entreprise" className="block text-sm font-medium text-gray-700">Entreprise</label>
-              <input 
-                type="text"
-                name="entreprise"
-                id="entreprise"
-                value={settings.entreprise}
-                placeholder="Nom de l'entreprise" 
-                onChange={handleSettingsFieldChange} 
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-            </div>
-            <div>
-              <label htmlFor="adresse" className="block text-sm font-medium text-gray-700">Adresse</label>
-              <input 
-                type="text"
-                name="adresse"
-                id="adresse"
-                value={settings.adresse}
-                placeholder="Adresse de l'entreprise" 
-                onChange={handleSettingsFieldChange} 
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-            </div>
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Téléphone</label>
-              <input 
-                type="text"
-                name="phone"
-                id="phone"
-                value={settings.phone}
-                placeholder="Téléphone" 
-                required 
-                onChange={handleSettingsFieldChange} 
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-            </div>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-              <input 
-                type="email"
-                name="email"
-                id="email"
-                value={settings.email}
-                placeholder="Email" 
-                required 
-                onChange={handleSettingsFieldChange} 
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-            </div>
-            <div className="mb-6">
-              <label className="block mb-1 font-medium text-gray-700">Logo</label>
-              <input type="file" name="logo" id='logo' accept="image/*" onChange={handleSettingsLogoChange} className="w-full" />
-            </div>
-            <div>
-              <label 
-              htmlFor="username" 
-              className="block text-sm font-medium text-gray-700">
-                Nom d'utilisateur
-              </label>
-              <input
-                type="text"
-                name="username"
-                id="username"
-                value={settings.username}
-                required
-                onChange={handleSettingsFieldChange}
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
-            >
-              Enregistrer
-            </button>
-          </form>
+          </div>
+          {/*Parametre menu navigant */}
+          <div className="fixed bottom-0 left-0 w-full flex p-2 flex items-start justify-center rounded shadow">
+            <ul className="w-full flex justify-center gap-3 bg-violet-300 py-2 rounded-full">
+              <li
+                className={`py-2 px-3 rounded cursor-pointer w-10 flex justify-center items-center rounded-full
+                  ${
+                    settingsSelectedMenu === 'informations'
+                      ? 'bg-violet-400'
+                      : 'h-10 bg-white/70 hover:bg-white/90'
+                  }`}
+                onClick={() => setSettingsSelectedMenu('informations')}
+              >
+                <FaUser />
+              </li>
+              {user.role === 'admin' && 
+                <li
+                  className={`py-2 px-3 rounded cursor-pointer w-10 h-10 flex justify-center items-center rounded-full
+                    ${
+                      settingsSelectedMenu === 'utilisateurs'
+                        ? 'bg-violet-400'
+                        : 'h-10 bg-white/70 hover:bg-white/90'
+                    }`}
+                  onClick={() => setSettingsSelectedMenu('utilisateurs')}
+                >
+                  <FaUsers/>
+                </li>
+              }
+              <li
+                className={`py-2 px-3 rounded cursor-pointer w-10 h-10 flex justify-center items-center rounded-full
+                  ${
+                    settingsSelectedMenu === 'apropos'
+                      ? 'bg-violet-400'
+                      : 'h-10 bg-white/70 hover:bg-white/90'
+                  }`}
+                onClick={() => setSettingsSelectedMenu('apropos')}
+              >
+                <FaInfo/>
+              </li>
+            </ul>
+          </div>
         </div>
       )}
       {aiResult && (
@@ -1189,12 +1628,14 @@ export default function App() {
         </div>
       )}
       {/* Bouton panier mobile */}
-      <button onClick={() => setCartOpen(true)}
-        className="fixed bottom-4 right-4 bg-amber-600 border border-transparent text-center text-white text-lg text-slate-800 transition-all px-5 py-3 rounded-full shadow-lg sm:hidden z-50 flex-1 justify-center"
-        style={{width: '100px', height: '100px'}}>
-        <span className='flex justify-center'><FaShoppingCart className='text-xl'/></span>
-        <span>Panier ({cart.length})</span>
-      </button>
+      {view !== 'settings' && 
+        <button onClick={() => setCartOpen(true)}
+          className="fixed bottom-4 right-4 bg-amber-600 border border-transparent text-center text-white text-lg text-slate-800 transition-all px-5 py-3 rounded-full shadow-lg sm:hidden z-50 flex-1 justify-center"
+          style={{width: '100px', height: '100px'}}>
+          <span className='flex justify-center'><FaShoppingCart className='text-xl'/></span>
+          <span>Panier ({cart.length})</span>
+        </button>
+      }
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex justify-end sm:hidden">
           {/* Overlay */}
@@ -1255,8 +1696,12 @@ export default function App() {
                 />
               )}
             </div>
-            <button onClick={checkout} className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2">
-              <FaCheck /> Valider la vente
+            <button
+              onClick={checkout}
+              disabled={isLoadingCheckout}
+              className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2"
+            >
+              {isLoadingCheckout ? "Traitement..." : <><FaCheck /> Valider la vente</>}
             </button>
           </div>
         </div>

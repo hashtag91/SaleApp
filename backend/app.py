@@ -1,5 +1,6 @@
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, jsonify, request, send_file, send_from_directory, session
+from flask import Flask, jsonify, request, send_file, send_from_directory, session, abort
+from flask_login import login_user, logout_user, current_user, UserMixin, LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
@@ -30,6 +31,12 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
+login_manager = LoginManager(app)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -42,15 +49,19 @@ class Product(db.Model):
     buy_price = db.Column(db.Float, nullable=True)
     stock = db.Column(db.Integer, default=0)
     image_url = db.Column(db.String(200))
+    parent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Pour les employés
+
 
 class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Pour les employés
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     date = db.Column(db.DateTime, default=datetime.utcnow)
     total = db.Column(db.Float, nullable=False)
     items = db.Column(db.Text, nullable=False)
+    seller = db.Column(db.String(200), nullable=False)  # Nom de l'utilisateur qui a créé le produit
 
-class User(db.Model):
+class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), nullable=False)
     surname = db.Column(db.String(80), nullable=False)
@@ -61,25 +72,47 @@ class User(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
+    role = db.Column(db.String(50), nullable=False, default='autres')
+    parent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relation utile
+    employees = db.relationship('User', backref=db.backref('parent', remote_side=[id]))
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return jsonify({'error': 'Authentification requise'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Décorateur pour vérifier que l'utilisateur est admin
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role != 'admin':
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
     
 @app.route('/api/register', methods=['POST'])
 def register():
     if User.query.filter_by(username=request.form.get('username')).first():
         return jsonify({'error': 'Username already exists'}), 400
+    
      # Récupération et nettoyage des champs
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '').strip()
     name = request.form.get('name', '').strip()
     surname = request.form.get('surname', '').strip()
     entreprise = request.form.get('entreprise', 'SALE APP').strip()
-    adresse = request.form.get('adress', '').strip()
     adresse = request.form.get('adresse', '').strip()
     phone = request.form.get('phone', '').strip()
     email = request.form.get('email', '').strip()
@@ -114,7 +147,8 @@ def register():
         adresse=adresse or None,
         logo=logo_url,
         phone=phone or None,
-        email=email or None
+        email=email or None,
+        role="Admin",
     )
     user.set_password(password)
 
@@ -123,41 +157,101 @@ def register():
 
     return jsonify({'message': 'Utilisateur créé avec succès.'}), 201
 
+@app.route('/api/employees', methods=['POST'])
+@login_required
+@admin_required
+def add_employee():
+    if current_user.role != 'admin':
+        abort(403)
+
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '').strip()
+    name = request.form.get('name', '').strip()
+    surname = request.form.get('surname', '').strip()
+    adresse = request.form.get('adresse', '').strip()
+    phone = request.form.get('phone', '').strip()
+    email = request.form.get('email', '').strip()
+    role = request.form.get('role', 'autres').strip()
+
+    # Contrôles basiques
+    if not username or not password or not name or not surname:
+        return jsonify({'error': 'Les champs nom, prénom, username et mot de passe sont requis.'}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Ce nom d\'utilisateur est déjà pris.'}), 400
+
+    if email and User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Cet email est déjà utilisé.'}), 400
+    
+    # Création de l'utilisateur
+    user = User(
+        username=username,
+        name=name,
+        surname=surname,
+        entreprise=current_user.entreprise,
+        adresse=adresse or None,
+        logo=current_user.logo,
+        phone=phone or None,
+        email=email or None,
+        role=role,
+        parent_id=current_user.id  # Associe l'employé à l'utilisateur courant
+    )
+    user.set_password(password)
+
+    db.session.add(user)
+    db.session.commit()
+
+    return jsonify({'message': 'Utilisateur créé avec succès.'}), 201
+
+@app.route('/api/employees', methods=['GET'])
+
+def get_employees():
+    print("Hello")
+    """
+    Récupère la liste des employés de l'utilisateur connecté.
+    Retourne un JSON contenant les informations de chaque employé.
+    """
+    print(f"Récupération des employés pour l'utilisateur {current_user.id} ({current_user.username})")
+    employees = User.query.filter_by(parent_id=current_user.id).all()
+    
+    return jsonify([{
+        'id': emp.id,
+        'name': emp.name,
+        'surname': emp.surname,
+        'username': emp.username,
+        'phone': emp.phone,
+        'email': emp.email,
+        'role': emp.role
+    } for emp in employees])
+
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
     user = User.query.filter_by(username=data['username']).first()
     if not user or not user.check_password(data['password']):
         return jsonify({'error': 'Identifiants invalides'}), 401
-    session['user_id'] = user.id
+    login_user(user)
     return jsonify({'message': 'Connecté'})
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
-    session.pop('user_id', None)
+    logout_user()
     return jsonify({'message': 'Déconnecté'})
 
 @app.route('/api/me')
 def get_current_user():
-    if 'user_id' not in session:
-        return jsonify({'user': None})
-    user = User.query.get(session['user_id'])
+    user = User.query.get(current_user.id)
     return jsonify({'user': {
+        'id': user.id,
         'user': user.username,
         'name': user.name,
         'surname': user.surname,
         'entreprise': user.entreprise,
         'phone': user.phone,
-        'email': user.email
+        'email': user.email,
+        'logo': user.logo,
+        'role': user.role,
     }})
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return jsonify({'error': 'Authentification requise'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
 
 @app.route('/api/settings', methods=['GET'])
 @login_required
@@ -191,7 +285,7 @@ def settings():
         "error": "Utilisateur non trouvé"
     }
     """
-    user_id = session.get('user_id')
+    user_id = current_user.id
     user = User.query.filter_by(id=user_id).first()
     print(user)
 
@@ -219,7 +313,7 @@ def settings():
 @app.route('/api/settings', methods=['POST'])
 @login_required
 def update_settings():
-    user_id = session.get('user_id')
+    user_id = current_user.id
     
     name = request.form.get('name', '').strip()
     surname = request.form.get('surname', '').strip()
@@ -229,7 +323,6 @@ def update_settings():
     entreprise = request.form.get('entreprise', '').strip()
     adresse = request.form.get('adresse', '').strip()
     logo = request.files.get('logo', None)
-    password = request.form.get('password', '').strip()
 
     user = User.query.filter_by(id=user_id).first()
     if not user:
@@ -243,10 +336,6 @@ def update_settings():
     user.entreprise = entreprise
     user.adresse = adresse
 
-    if password:
-        if len(password) < 6:
-            return jsonify({'error': 'Le mot de passe doit contenir au moins 6 caractères.'}), 400
-        user.set_password(password)
     if logo:
         filename = secure_filename(logo.filename)
         if not allowed_file(filename):
@@ -255,7 +344,6 @@ def update_settings():
         logo_path = os.path.join(app.config['UPLOAD_FOLDER'], 'logo', filename)
         logo.save(logo_path)
         user.logo = filename
-        user.logo = logo_path
 
     db.session.commit()
     return jsonify({'message': 'Paramètres mis à jour avec succès.'})
@@ -263,7 +351,10 @@ def update_settings():
 @app.route('/api/products', methods=['GET'])
 @login_required
 def get_products():
-    user_id = session.get('user_id')
+    if current_user.role != 'admin':
+        user_id = current_user.parent_id or current_user.id
+    else:
+        user_id = current_user.id
     products = Product.query.filter_by(user_id=user_id).all()
     return jsonify([{
         'id': p.id,
@@ -277,8 +368,9 @@ def get_products():
 
 @app.route('/api/products', methods=['POST'])
 @login_required
+@admin_required
 def add_product():
-    user_id = session.get('user_id')
+    user_id = current_user.id
     image = request.files.get('image')
     sku = request.form.get('sku')
     name = request.form.get('name')
@@ -307,7 +399,8 @@ def add_product():
         price=float(price),
         buy_price=float(buy_price),
         stock=int(stock),
-        image_url=image_url
+        image_url=image_url,
+        parent_id=current_user.parent_id or current_user.id,  # Pour les employés, on utilise parent_id (id de l'admin) pour lier le produit à l'entreprise
     )
     db.session.add(product)
     db.session.commit()
@@ -319,11 +412,13 @@ def add_product():
         'price': product.price,
         'buy_price': product.buy_price,
         'stock': product.stock,
-        'imageUrl': product.image_url
+        'imageUrl': product.image_url,
+        'seller': product.seller
     }), 201
 
 @app.route('/api/products/<int:id>', methods=['PUT'])
 @login_required
+@admin_required
 def update_product(id):
     """
     Met à jour les informations d'un produit existant dans la base de données.
@@ -369,6 +464,7 @@ def update_product(id):
 
 @app.route('/api/products/<int:id>', methods=['DELETE'])
 @login_required
+@admin_required
 def delete_product(id):
     p = Product.query.get_or_404(id)
     db.session.delete(p)
@@ -405,12 +501,13 @@ def search_products():
 @app.route('/api/sales', methods=['POST'])
 @login_required
 def record_sale():
-    user_id = session.get('user_id')
+    parent_id = current_user.parent_id or current_user.id # Pour les employés, on utilise parent_id (id de l'admin) pour lier la vente à l'entreprise
+    user_id = current_user.id
     data = request.get_json()
-    s = Sale(user_id=user_id, total=data['total'], items=data['items'])
+    s = Sale(parent_id=parent_id, user_id=user_id, total=data['total'], items=data['items'], seller=f"{current_user.name} {current_user.surname}")
     db.session.add(s)
     for item in data['cart']:
-        product = Product.query.filter_by(id=item['id'], user_id=user_id).first()
+        product = Product.query.filter_by(id=item['id'], parent_id=parent_id).first()
         if product and product.stock >= item['qty']:
             product.stock -= item['qty']
     db.session.commit()
@@ -422,13 +519,19 @@ def record_sale():
 @app.route('/api/sales', methods=['GET'])
 @login_required
 def get_sales():
-    user_id = session.get('user_id')
-    sales = Sale.query.filter_by(user_id=user_id).order_by(Sale.date.desc()).all()
+    """Le filtre est appliqué en fonction du rôle de l'utilisateur. L'Admin ayant son id sur toutes les lignes de ventes de l'entreprise dans la colonne 'parent_id' de la table Sale 
+    verra toutes les ventes de l'entreprise, tandis que les employés verront uniquement leurs propres ventes."""
+    parent_id = current_user.parent_id or current_user.id
+    if current_user.role == 'admin':
+        sales = Sale.query.filter_by(parent_id=parent_id).order_by(Sale.date.desc()).all()
+    else:
+        sales = Sale.query.filter_by(user_id=current_user.id).order_by(Sale.date.desc()).all()
     return jsonify([{
         'id': s.id,
         'date': s.date.isoformat(),
         'total': s.total,
-        'items': s.items
+        'items': s.items,
+        'seller': s.seller  # Ajout du nom du vendeur
     } for s in sales])
 
 @app.route('/api/facture', methods=['POST'])
@@ -469,12 +572,11 @@ def generer_facture_pdf():
     c = canvas.Canvas(buffer, pagesize=A4)
     largeur, hauteur = A4
 
-    user_id = session.get('user_id')
+    user_id = current_user.id
     user = User.query.get(user_id)
     # Logo
     root_app = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(root_app, 'build', 'static', 'uploads', 'logo', user.logo) if user and user.logo else os.path.join(root_app, 'build', 'static', 'logo.jpg')
-    print(logo_path)
     if os.path.exists(logo_path):
         c.drawImage(logo_path, 20 * mm, hauteur - 50 * mm, width=30 * mm, height=30 * mm, preserveAspectRatio=True, mask='auto')
 
@@ -546,7 +648,7 @@ def export_sales_csv():
     """
     start_date = request.args.get('start')
     end_date = request.args.get('end')
-    query = Sale.query.filter(Sale.user_id == session.get('user_id'))
+    query = Sale.query.filter(Sale.user_id == current_user.id)
     if start_date:
         query = query.filter(Sale.date >= datetime.fromisoformat(start_date))
     if end_date:
@@ -564,6 +666,8 @@ def export_sales_csv():
     return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='sales.csv')
 
 @app.route('/api/ai/conseil', methods=['POST'])
+@login_required
+@admin_required
 def conseil_ventes():
     """
     Analyse l'historique des ventes fourni en JSON, identifie les tendances, estime les revenus futurs, 
