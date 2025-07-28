@@ -4,24 +4,35 @@ from flask_login import login_user, logout_user, current_user, UserMixin, LoginM
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
+from flask_mail import Mail, Message
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from datetime import datetime
+from datetime import date, datetime, timedelta
 import csv
 import io
 import json
 import os
-import requests
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 load_dotenv()
 from functools import wraps
+import requests
+import random
 
 app = Flask(__name__, static_folder='build', static_url_path='')
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pos.db'
 app.secret_key = os.getenv("SECRET_KEY", "changeme")
+app.config.update(
+    MAIL_SERVER='smtp.gmail.com',
+    MAIL_PORT=587,
+    MAIL_USE_TLS=True,
+    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
+    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
+)
+mail = Mail(app)
+API_KEY = os.getenv("API_KEY")
 
 UPLOAD_FOLDER = os.path.join(app.root_path, 'build/static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -75,6 +86,11 @@ class User(db.Model, UserMixin):
     role = db.Column(db.String(50), nullable=False, default='autres')
     parent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    tokens_conseil = db.Column(db.Integer, default=3)  # Nombre de tokens pour l'IA
+    last_token_reset = db.Column(db.Date, default=date.today()) # Date de dernière mise à jour de tokens
+    reset_code = db.Column(db.String(6), nullable=True) # Pour contenir le code de reinitialisation de mot de passe
+    reset_code_expiration = db.Column(db.DateTime, nullable=True) # Date d'expiration du code de réinitialisation
+    dark_mode = db.Column(db.Boolean, default=False)  # Préférence pour le mode sombre
 
     # Relation utile
     employees = db.relationship('User', backref=db.backref('parent', remote_side=[id]))
@@ -101,7 +117,41 @@ def admin_required(f):
             abort(403)
         return f(*args, **kwargs)
     return decorated_function
-    
+
+def reset_tokens_if_needed(user):
+    today = date.today()
+    if user.last_token_reset != today:
+        user.tokens_conseil = 3
+        user.last_token_reset = today
+        db.session.commit()
+
+def generate_reset_code():
+    """Génère un code de réinitialisation aléatoire de 6 chiffres."""
+    return ''.join(random.choices('0123456789', k=6))
+
+def send_reset_email(email, reset_code):
+    """Envoie un email de réinitialisation de mot de passe."""
+    msg = Message("Réinitialisation de votre mot de passe",
+                  sender=os.getenv("MAIL_USERNAME"),
+                  recipients=[email])
+    msg.body = f"Votre code de réinitialisation est : {reset_code} pour réinitialiser votre mot de passe. Ce code est valable pendant 30 minutes."
+    mail.send(msg)
+
+@app.route('/api/theme', methods=['PUT'])
+@login_required
+def theme():
+
+    data = request.form if request.form else request.get_json()
+    dark_mode = str(data.get('dark_mode')).lower() == 'true'
+
+    current_user.dark_mode = dark_mode
+    db.session.commit()
+
+    if dark_mode:
+        return jsonify({'message': 'Mode sombre activé'}), 200
+    else:
+        return jsonify({'message': 'Mode sombre désactivé'}), 200
+
 @app.route('/api/register', methods=['POST'])
 def register():
     if User.query.filter_by(username=request.form.get('username')).first():
@@ -157,6 +207,85 @@ def register():
 
     return jsonify({'message': 'Utilisateur créé avec succès.'}), 201
 
+@app.route('/api/forgot_password', methods=['POST'])
+def forgot_password():
+    email = request.form.get('email')
+    print(email)
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        return jsonify({'error': 'Aucun utilisateur trouvé avec cet email.'}), 404
+
+    # Génération du code de réinitialisation
+    user.reset_code = generate_reset_code()
+    user.reset_code_expiration = datetime.utcnow() + timedelta(minutes=30)
+    db.session.commit()
+
+    # Envoi du code par email (fonction fictive)
+    send_reset_email(user.email, user.reset_code)
+
+    session['reset_user_id'] = user.id  # Stocke l'ID de l'utilisateur dans la session pour la réinitialisation du mot de passe
+
+    return jsonify({'message': 'Un email de réinitialisation a été envoyé.'}), 200
+
+@app.route('/api/reset_password_code', methods=['POST'])
+def reset_password_code():
+    code = request.form.get('code')
+    print(code)
+    user = User.query.filter_by(id=session.get('reset_user_id')).first()
+    if not user or user.reset_code != code:
+        return jsonify({'error': 'Code invalide.'}), 400
+
+    # Vérifier si le code de réinitialisation a expiré
+    if user.reset_code_expiration < datetime.utcnow():
+        return jsonify({'error': 'Code expiré.'}), 400
+    
+    # Si le code est valide, on peut permettre à l'utilisateur de réinitialiser son mot de passe
+    return jsonify({'message': 'Code valide. Vous pouvez maintenant réinitialiser votre mot de passe.'}), 200
+    
+# Route pour réinitialiser le mot de passe lorsque sur oublié mot de passe
+@app.route('/api/reset_forgot_password', methods=['POST'])
+def reset_forgot_password():
+    new_password = request.form.get('password')
+
+    user = User.query.filter_by(id=session.get('reset_user_id')).first()
+
+    # Mettre à jour le mot de passe
+    user.set_password(new_password)
+    user.reset_code = None
+    user.reset_code_expiration = None
+    db.session.commit()
+
+    session.pop('reset_user_id', None)  # Supprimer l'ID de l'utilisateur de la session
+
+    return jsonify({'message': 'Mot de passe mis à jour avec succès.'}), 200
+
+# Route pour réinitialiser le mot de passe de l'utilisateur connecté
+@app.route("/api/reset_password", methods=["POST"])
+@login_required
+def reset_password():
+    """
+    Réinitialise le mot de passe de l'utilisateur connecté.
+    Les champs requis sont : 'oldPassword', 'newPassword', 'confirmPassword'.
+    """
+    old_password = request.form.get('oldPassword')
+    new_password = request.form.get('newPassword')
+    confirm_password = request.form.get('confirmPassword')
+
+    if not old_password or not new_password or not confirm_password:
+        return jsonify({'error': 'Tous les champs sont requis.'}), 400
+
+    if not current_user.check_password(old_password):
+        return jsonify({'error': 'Ancien mot de passe incorrect.'}), 400
+
+    if new_password != confirm_password:
+        return jsonify({'error': 'Les nouveaux mots de passe ne correspondent pas.'}), 400
+
+    current_user.set_password(new_password)
+    db.session.commit()
+
+    return jsonify({'message': 'Mot de passe réinitialisé avec succès.'})
+
 @app.route('/api/employees', methods=['POST'])
 @login_required
 @admin_required
@@ -203,15 +332,43 @@ def add_employee():
 
     return jsonify({'message': 'Utilisateur créé avec succès.'}), 201
 
-@app.route('/api/employees', methods=['GET'])
+@app.route("/api/employees/<int:id>", methods=["PUT"])
+@login_required
+@admin_required
+def update_employee(id):
+    employee = User.query.get_or_404(id)
 
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Vous n\'avez pas cette autorisation.'}), 403
+
+    data = request.get_json()
+
+    print(data)
+
+    employee.name = data.get('name')
+    employee.surname = data.get('surname')
+    employee.username = data.get('username')
+    employee.phone = data.get('phone')
+    employee.email = data.get('email')
+    employee.adresse = data.get('adresse')
+    employee.role = data.get('role')
+
+    if 'password' in data and data['password']:
+        if len(data['password']) < 6:
+            return jsonify({'error': 'Le mot de passe doit contenir au moins 6 caractères.'}), 400
+        employee.set_password(data.get('password'))
+
+    db.session.commit()
+    return jsonify({'message': 'Employé mis à jour avec succès !'})
+
+@app.route('/api/employees', methods=['GET'])
+@login_required
+@admin_required
 def get_employees():
-    print("Hello")
     """
     Récupère la liste des employés de l'utilisateur connecté.
     Retourne un JSON contenant les informations de chaque employé.
     """
-    print(f"Récupération des employés pour l'utilisateur {current_user.id} ({current_user.username})")
     employees = User.query.filter_by(parent_id=current_user.id).all()
     
     return jsonify([{
@@ -221,8 +378,21 @@ def get_employees():
         'username': emp.username,
         'phone': emp.phone,
         'email': emp.email,
+        'adresse': emp.adresse,
         'role': emp.role
     } for emp in employees])
+
+@app.route("/api/employees/<int:id>", methods=["DELETE"])
+@login_required
+@admin_required
+def delete_employee(id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Non autorisé'}), 403
+
+    user = User.query.get_or_404(id)
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'message': 'Employé supprimé avec succès'})
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -231,6 +401,7 @@ def login():
     if not user or not user.check_password(data['password']):
         return jsonify({'error': 'Identifiants invalides'}), 401
     login_user(user)
+    reset_tokens_if_needed(current_user)
     return jsonify({'message': 'Connecté'})
 
 @app.route('/api/logout', methods=['POST'])
@@ -251,6 +422,8 @@ def get_current_user():
         'email': user.email,
         'logo': user.logo,
         'role': user.role,
+        'tokens_conseil': user.tokens_conseil,
+        'dark_mode' : user.dark_mode,
     }})
 
 @app.route('/api/settings', methods=['GET'])
@@ -287,7 +460,6 @@ def settings():
     """
     user_id = current_user.id
     user = User.query.filter_by(id=user_id).first()
-    print(user)
 
     if not user:
         return jsonify({'error': 'Utilisateur non trouvé'}), 404
@@ -412,8 +584,7 @@ def add_product():
         'price': product.price,
         'buy_price': product.buy_price,
         'stock': product.stock,
-        'imageUrl': product.image_url,
-        'seller': product.seller
+        'imageUrl': product.image_url
     }), 201
 
 @app.route('/api/products/<int:id>', methods=['PUT'])
@@ -507,13 +678,10 @@ def record_sale():
     s = Sale(parent_id=parent_id, user_id=user_id, total=data['total'], items=data['items'], seller=f"{current_user.name} {current_user.surname}")
     db.session.add(s)
     for item in data['cart']:
-        product = Product.query.filter_by(id=item['id'], parent_id=parent_id).first()
+        product = Product.query.filter_by(id=item['id']).first()
         if product and product.stock >= item['qty']:
             product.stock -= item['qty']
     db.session.commit()
-    if data.get('generate_invoice', False):
-        # Here you would generate an invoice PDF, but for simplicity, we skip this step
-        print("Génération de la facture PDF (non implémentée)")
     return jsonify({'message': 'Vente enregistrée'})
 
 @app.route('/api/sales', methods=['GET'])
@@ -607,9 +775,7 @@ def generer_facture_pdf():
 
     y = hauteur - 120 * mm
     c.setFont("Helvetica", 10)
-    print(type(items))
     for item in items:
-        print(type(item))
         description = item.get('name', '')
         qty = item.get('qty', 0)
         price = item.get('price', 0)
@@ -683,7 +849,9 @@ def conseil_ventes():
             {"produit": "Produit B", "quantite": 5, "date": "2024-06-02"}
         ]
     """
-
+    if current_user.tokens_conseil <= 0:
+        return jsonify({'error': "Limite de 3 conseils IA atteinte pour aujourd'hui."}), 403
+    
     data = request.get_json()
 
     if not data or len(data) == 0:
@@ -692,21 +860,37 @@ def conseil_ventes():
     prompt = f"Voici un historique de ventes sous forme JSON. Analyse les tendances, estime les revenus futurs, identifie les produits les plus populaires et donne des conseils précis sur les réapprovisionnements en français. {json.dumps(data)}"
 
     try:
-        res = requests.post("http://localhost:11434/api/generate", json={
-            "model": "deepseek-r1:1.5b",
-            "prompt": prompt,
-            "stream": False
-        })
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {API_KEY}"
+        }
+        data = {
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        }
 
-        res.raise_for_status()
-        output = res.json()
-        print(output)
-        content = output.get('response', "Aucune réponse de l'IA.")
-        return jsonify({"response": content}), 200
+        response = requests.post(url, headers=headers, json=data)
+
+        # Affiche la réponse JSON
+        content = response.json().get('choices', [{}])[0].get('message', {}).get('content', "Aucune réponse de l'IA.")
+
+        # ✅ Consommer un jeton
+        current_user.tokens_conseil -= 1
+        db.session.commit()
+
+        if not content:
+            return jsonify({'error': "Aucune réponse de l'IA."}), 500
+        return jsonify({"response": {"message": content, "tokens_conseil": current_user.tokens_conseil}}), 200
 
     except Exception as e:
-        print("Erreur IA:", e)
-        return jsonify({'response': "Erreur lors de l'analyse IA."}), 500
+        print(e)
+        return jsonify({'error': "Erreur lors de l'analyse IA."}), 500
 
 @app.route('/')
 def serve():

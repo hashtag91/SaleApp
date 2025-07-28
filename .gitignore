@@ -1,5 +1,4 @@
 env/
 backend/__pycache__/
-backend/.env
 frontend/node_modules/
 package-lock.json

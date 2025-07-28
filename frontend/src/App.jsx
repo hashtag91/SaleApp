@@ -36,6 +36,13 @@ import {
 import soundFile from './assets/add.mp3'; // chemin relatif vers le fichier audio
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import RegisterForm from './composants_react/RegisterForm';
+import LoginForm from './composants_react/LoginForm';
+import MobileDrawOpen from './composants_react/MobileDrawOpen'
+import Switcher from './composants_react/Switcher'
+import ReactMarkdown from 'react-markdown';
+import SubUserEditForm from './composants_react/SubUserEditForm';
+import AboutPage from './composants_react/About';
 
 export default function App() {
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
@@ -76,15 +83,23 @@ export default function App() {
   const [editProduct, setEditProduct] = useState(null);
   const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', sku: '', image: null });
   const [stockFilter, setStockFilter] = useState('all');
-  const [aiResult, setAiResult] = useState("");
+  const [analyseMarkDown, setAnalyseMarkDown] = useState("");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false); // drawer panier mobile
   const [generateInvoice, setGenerateInvoice] = useState(false);
   const [isLoadingFacture, setIsLoadingFacture] = useState(false);
   const [clientName, setClientName] = useState('');
   const [settingsSelectedMenu, setSettingsSelectedMenu] = useState('informations');
+  const [showPasswordChange, setShowPasswordChange] = useState(false); // Constante pour afficher le formulaire de changement de mot de passe
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState(''); // Constante pour stocker le nouveau mot de passe
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [subUsers, setSubUsers] = useState([]);
   const [subUsersFiltered, setSubUsersFiltered] = useState(subUsers);
+  const [darkMode, setDarkMode] = useState(false);
+  const [subUserId, setSubUserId] = useState(null);
+  const [editedSubUserData, setEditedSubUserData] = useState({name: '',surname: '',username: '',phone: '',email: '',adresse: '',role: '', password: null});
+  const [subUserToDelete, setSubUserToDelete] = useState(null);
 
   const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
 
@@ -94,6 +109,7 @@ export default function App() {
       const res = await axios.post('/api/login', { username, password });
       const me = await axios.get('/api/me');
       setUser(me.data.user);
+      setDarkMode(me.data.user.dark_mode)
       toast.success("Connexion réussie !");
       loadProducts();
     } catch (error) {
@@ -177,16 +193,13 @@ export default function App() {
       .then(res => {
         if (res.data.user) {
           setUser(res.data.user);
+          setDarkMode(res.data.user.dark_mode);
           loadProducts();
           loadSubUsers();
         } else {
           handleLogout();
         }
       })
-      .catch((err) => {
-        toast.error("Erreur session expirée", err);
-        handleLogout();
-      });
   }, []);
 
   const settingsRetrieve = () => {
@@ -233,6 +246,40 @@ export default function App() {
     .catch ((err) => {
       toast.error(err.data.error);
     })
+  }
+
+  const handlePasswordReset  = async (e) => {
+    e.preventDefault();
+
+    const data = new FormData();
+
+    if (oldPassword.length < 6) {
+      toast.error("Mot de passe trop court.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("Mot de passe trop court.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Les mots de passe ne correspondent pas.");
+      return;
+    }
+    data.append('oldPassword', oldPassword);
+    data.append("newPassword", newPassword);
+    data.append('confirmPassword', confirmPassword);
+
+    try {
+      const res = await axios.post('/api/reset_password', data)
+      toast.success(res.data.message);
+      // Reset les champs
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowPasswordChange(false);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Erreur lors du changement de mot de passe");
+    }
   }
 
   const loadSubUsers = async () => {
@@ -338,6 +385,7 @@ export default function App() {
 
   const submitNewProduct = async (e) => {
     e.preventDefault();
+
     const { name, sku, price, stock } = newProduct;
     if (!name || !sku || !price || !stock) return toast.warning("Tous les champs sont requis.");
     if (isNaN(price) || price <= 0) return toast.warning("Prix invalide");
@@ -345,7 +393,14 @@ export default function App() {
 
     const formData = new FormData();
     Object.entries(newProduct).forEach(([key, val]) => {
-      if (val) formData.append(key, val);
+      if (val !== null && val !== undefined) {
+        // Convertir booléens en chaîne pour Flask
+        if (typeof val === 'boolean') {
+          formData.append(key, val ? 'true' : 'false');
+        } else {
+          formData.append(key, val);
+        }
+      }
     });
 
     await axios.post('/api/products', formData, {
@@ -354,7 +409,7 @@ export default function App() {
 
     toast.success('Produit ajouté');
     setShowAddProduct(false);
-    setNewProduct({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null });
+    setNewProduct({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null,  });
     loadProducts();
   };
 
@@ -504,28 +559,29 @@ export default function App() {
 
   const [loadingAI, setLoadingAI] = useState(false);
 
-  const analyserAvecIA = async () => {
+  const handleAnalyseIA = async () => {
     setLoadingAI(true);
     try {
-      const resSales = await axios.get("/api/sales");
-      const ventes = resSales.data;
+      const ventes = (await axios.get('/api/sales')).data;
 
       if (!ventes || ventes.length === 0) {
-        toast.default("Aucune vente à analyser.");
-        setLoadingAI(false);
+        toast.info("Aucune vente trouvée.");
         return;
       }
 
       const res = await axios.post('/api/ai/conseil', ventes);
-      setAiResult("🔮 IA :\n" + res.data.response);
+      const texte = res.data.response.message;
+      setUser({...user, 'tokens_conseil': res.data.response.tokens_conseil})
+
+      setAnalyseMarkDown(texte);
     } catch (e) {
-      console.error("Erreur IA :", e);
-      setAiResult("Erreur IA lors de l’analyse.");
+      toast.error("Limite de 3 conseils IA atteinte pour aujourd'hui.");
+      console.error(e);
+    } finally {
+      setLoadingAI(false);
     }
-    setLoadingAI(false);
   };
 
-  {/*A changer et aussi le setSubUsers dans useEffect*/}
   const filteredSubUsers = (e) => {
     const query = e.target.value.trim().toLowerCase();
       setSubUsersFiltered(
@@ -542,213 +598,144 @@ export default function App() {
     setSubUsersFiltered(subUsers);
   }, [subUsers]);
 
+  const handleEditSubUserSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`/api/employees/${subUserId}`, editedSubUserData);
+      toast.success("Employé modifié avec succès !");
+      setSubUserId(null);
+      loadSubUsers(); // recharge la liste
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Erreur lors de la modification");
+    }
+  };
+
+  const handleDeleteSubUser = async (userId) => {
+    try {
+      await axios.delete(`/api/employees/${userId}`);
+      toast.success("Utilisateur supprimé !");
+      setSubUserToDelete(null);
+      loadSubUsers(); // rechargement des utilisateurs
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Erreur lors de la suppression");
+    }
+  };
 
   if (!user){
     return(
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <form
-          onSubmit={showRegister ? handleRegister : handleLogin}
-          className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4"
-        >
-          <h2 className="text-2xl font-bold text-center text-gray-800">
-            {showRegister ? "Inscription" : "Connexion"}
-          </h2>
+      <div
+        className={`relative w-full min-h-screen bg-cover bg-center bg-no-repeat flex items-center justify-center transition-colors duration-500 ${
+          darkMode ? 'bg-slate-800' : 'bg-gray-50'
+        }`}
+        style={{
+          backgroundImage: "url('/images/background.png')",
+        }}
+      >
 
-          {showRegister && (
-            <>
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">Prénom</label>
-                <input 
-                  type="text"
-                  name="name"
-                  id="name"
-                  placeholder="Nom"
-                  required
-                  onChange={(e) => setName(e.target.value)} 
-                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" 
-                />
-              </div>
-              <div>
-                <label htmlFor="surname" className="block text-sm font-medium text-gray-700">Nom</label>
-                <input 
-                  type="text"
-                  name="surname"
-                  id="surname"
-                  placeholder="Prénom" 
-                  required 
-                  onChange={(e) => setSurname(e.target.value)} 
-                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-              </div>
-              <div>
-                <label htmlFor="entreprise" className="block text-sm font-medium text-gray-700">Entreprise</label>
-                <input 
-                  type="text"
-                  name="entreprise"
-                  id="entreprise"
-                  placeholder="Nom de l'entreprise" 
-                  onChange={(e) => setEntreprise(e.target.value)} 
-                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-              </div>
-              <div>
-                <label htmlFor="adresse" className="block text-sm font-medium text-gray-700">Adresse</label>
-                <input 
-                  type="text"
-                  name="adresse"
-                  id="adresse"
-                  placeholder="Adresse de l'entreprise" 
-                  onChange={(e) => setAdress(e.target.value)} 
-                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-              </div>
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Téléphone</label>
-                <input 
-                  type="text"
-                  name="phone"
-                  id="phone"
-                  placeholder="Téléphone" 
-                  required 
-                  onChange={(e) => setPhone(e.target.value)} 
-                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-              </div>
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-                <input 
-                  type="email"
-                  name="email"
-                  id="email"
-                  placeholder="Email" 
-                  required 
-                  onChange={(e) => setEmail(e.target.value)} 
-                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-              </div>
-              <div className="mb-6">
-                <label className="block mb-1 font-medium text-gray-700">Logo</label>
-                <input type="file" name="logo" id='logo' accept="image/*" onChange={(e) => setLogo(e.target.files[0])} className="w-full" />
-              </div>
-            </>
+        {/* Filtre semi-transparent */}
+        <div className="h-full absolute inset-0 bg-white/80 dark:bg-slate-900/80"></div>
+
+        {/* Contenu principal */}
+        <div className="relative z-10 w-full max-w-md p-6 rounded-xl shadow-xl backdrop-blur-sm">
+          
+          {/* Logo et accroche */}
+          <div className="flex flex-col items-center mb-8">
+            <img
+              src="/images/logo.png"
+              alt="Logo"
+              loading='lazy'
+              className="w-20 h-20 bg-white rounded-full mb-4"
+            />
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-white text-center">
+              Bienvenue sur <span className="text-blue-600 dark:text-blue-400">Sale App</span>
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300 text-center text-sm mt-2">
+              Connectez-vous ou créez un compte pour commencer.
+            </p>
+          </div>
+
+          {/* Formulaire Login ou Register */}
+          {showRegister ? (
+            <RegisterForm
+              setName={setName}
+              setSurname={setSurname}
+              setEntreprise={setEntreprise}
+              setAdress={setAdress}
+              setPhone={setPhone}
+              setEmail={setEmail}
+              setUsername={setUsername}
+              setPassword={setPassword}
+              setLogo={setLogo}
+              handleRegister={handleRegister}
+              setShowRegister={setShowRegister}
+              darkMode={darkMode}
+            />
+          ) : (
+            <LoginForm
+              setShowRegister={setShowRegister}
+              setPassword={setPassword}
+              setUsername={setUsername}
+              handleLogin={handleLogin}
+              darkMode={darkMode}
+            />
           )}
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">Nom d'utilisateur</label>
-            <input
-              type="text"
-              name="username"
-              id="username"
-              required
-              onChange={e => setUsername(e.target.value)}
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Mot de passe</label>
-            <input
-              type="password"
-              name="password"
-              id="password"
-              required
-              onChange={e => setPassword(e.target.value)}
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
-          >
-            Valider
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowRegister(!showRegister)}
-            className="w-full mt-2 text-indigo-600 hover:underline"
-          >
-            {showRegister ? "J'ai déjà un compte" : "Créer un compte"}
-          </button>
-        </form>
+        </div>
         <ToastContainer />
       </div>
+
     )
   }
 
   return (
-    <div className="p-4 sm:p-4 bg-gray-50 min-h-screen mx-auto">
-      <div className="sticky top-0 p-4 bg-gray-50 w-100 mb-3 flex justify-between items-center z-100">
-        <h2 className="text-2xl md:text-4xl font-bold text-gray-900">{user?.entreprise}</h2>
+    <div className={`${darkMode ? 'bg-slate-800' : 'bg-gray-50'} p-4 sm:p-4 bg-gray-50 min-h-screen mx-auto`}>
+      <div
+        className={`sticky top-0 p-4 w-full mb-3 flex justify-between items-center z-40 shadow rounded
+          ${darkMode ? 'bg-slate-700' : 'bg-white'}`}
+      >
+        <h2 className={`text-2xl md:text-4xl font-bold 
+          ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+          {user?.entreprise}
+        </h2>
         <div className="flex items-center space-x-3">
-          <FaUserCircle className="hidden sm:inline-flex text-2xl text-gray-700" />
-          <span className="font-medium hidden sm:inline-flex">{user?.name} {user?.surname}</span>
+          <Switcher darkMode={darkMode} setDarkMode={setDarkMode} className='sm:hidden'/>
+
+          <FaUserCircle className={`hidden sm:inline-flex text-2xl
+            ${darkMode ? 'text-gray-200' : 'text-gray-700'}`} />
+
+          <span className={`font-medium hidden sm:inline-flex 
+            ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+            {user?.name} {user?.surname}
+          </span>
+
           <button
-            onClick={() => {setView('settings'); setShowSettings(true); settingsRetrieve();}}
-            className='hidden sm:inline-flex'
-            type='button'>
-            <FaCog className="text-2xl text-gray-700"/>
+            onClick={() => { setView('settings'); setShowSettings(true); settingsRetrieve(); }}
+            className="hidden sm:inline-flex"
+            type="button"
+          >
+            <FaCog className={`text-2xl ${darkMode ? 'text-gray-200' : 'text-gray-700'}`} />
           </button>
-          <button onClick={() => setMobileDrawerOpen(true)}className="sm:hidden flex items-center text-gray-700">
+
+          <button
+            onClick={() => setMobileDrawerOpen(true)}
+            className={`sm:hidden flex items-center ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
+          >
             <FaBars />
           </button>
-          <button onClick={handleLogout}
-            className="hidden sm:inline-flex bg-red-600 text-white px-4 py-2 rounded ml-4">
+
+          <button
+            onClick={handleLogout}
+            className="hidden sm:inline-flex bg-red-600 text-white px-4 py-2 rounded ml-4"
+          >
             <FaSignOutAlt />
           </button>
         </div>
       </div>
 
-      {/* Le menu sur mobile */}
-      {mobileDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          {/* Overlay */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-40"
-            onClick={() => setMobileDrawerOpen(false)}
-          ></div>
 
-          {/* Drawer */}
-          <div className="relative z-50 w-64 max-w-full bg-white shadow-lg h-full transform transition-transform duration-300 ease-in-out translate-x-0">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Menu</h3>
-              <button onClick={() => setMobileDrawerOpen(false)} className="text-gray-500 hover:text-black">
-                ✕
-              </button>
-            </div>
-            <div className="flex flex-col p-4 gap-3">
-              <button onClick={() => { setView('pos'); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-                <FaShoppingCart className="inline-block mr-1" /> Caisse
-              </button>
-              <button onClick={() => { setView('admin'); loadProducts(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-                <FaBox className="inline-block mr-1" /> Produits
-              </button>
-              <button onClick={() => { setView('sales'); loadSales(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-                <FaCreditCard className="inline-block mr-1" /> Ventes
-              </button>
-              {user.role === 'admin' && 
-                <button onClick={() => { setView('charts'); loadSales(); setMobileDrawerOpen(false); }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-                  <FaChartBar className="inline-block mr-1" /> Graphiques
-                </button>
-              }
-              {user.role === 'admin' &&
-                <button onClick={() => { 
-                  analyserAvecIA; setMobileDrawerOpen(false); }}
-                  disabled={loadingAI}
-                  className="bg-purple-600 text-white px-4 py-2 rounded">
-                  {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
-                </button>
-              }
-              <button
-                onClick={() => {setView('settings'); setMobileDrawerOpen(false); setShowSettings(true); settingsRetrieve();}}
-                className='bg-gray-600 text-white px-4 py-2 rounded'>
-                <FaCog className='inline-block mr-1'/>Parametres
-              </button>
-              <button onClick={handleLogout}
-                className='bg-red-600 text-white px-4 py-2 rounded'>
-                Deconnecter
-              </button>
-            </div>
-            <div className='flex'>
-              <FaUserCircle className="hidden sm:inline-flex text-2xl text-gray-700" />
-              <span className="font-medium hidden sm:inline-flex">{user?.name} {user?.surname}</span>
-            </div>
-          </div>
-        </div>
+      {/* Le menu sur mobile */}
+      {/*  */}
+      {mobileDrawerOpen && (
+        <MobileDrawOpen setMobileDrawerOpen={setMobileDrawerOpen} setView={setView} loadProducts={loadProducts} loadSales={loadSales} loadingAI={loadingAI} setShowSettings={setShowSettings} settingsRetrieve={settingsRetrieve} handleLogout={handleLogout} user={user} darkMode={darkMode}/>
       )}
       <div className="hidden sm:flex flex-wrap flex-row gap-3 justify-center mb-6">
         <button onClick={() => setView('pos')} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'pos' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
@@ -773,10 +760,10 @@ export default function App() {
         }
         {user.role === 'admin' && 
           <button 
-            onClick={analyserAvecIA} 
+            onClick={() => setView('analyse')}
             disabled={loadingAI}
-            className="bg-purple-600 text-white px-4 py-2 rounded">
-            {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
+            className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'analyse' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
+            {loadingAI ? "Analyse en cours..." : `🔮 Analyse IA (${user.tokens_conseil})`}
           </button>
         }
       </div>
@@ -797,7 +784,7 @@ export default function App() {
       {view === 'pos' && (
         <div className="flex flex-col lg:flex-row gap-6 w-full">
           <div className="flex-1">
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">Produits</h2>
+            <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Produits</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3">
               {filteredProducts.map((p) => (
                 <button key={p.id} onClick={() => addToCart(p)} className="bg-blue-600 text-white rounded-xl shadow flex" style={{ minHeight: '120px' }}>
@@ -821,19 +808,19 @@ export default function App() {
           </div>
 
           <div className="hidden sm:block" style={{ width: '30vw', minWidth: '280px' }}>
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <h2 className={`text-xl font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : ''}`}>
               <FaShoppingCart /> Panier
             </h2>
             <ul>
               {cart.map((p) => (
                 <li key={p.id} className="mb-3 flex justify-between items-center">
                   <div className="flex-1">
-                    <div className="font-semibold">{p.name}</div>
+                    <div className={`font-semibold ${darkMode ? 'text-white' :''}`}>{p.name}</div>
                     <div className="text-sm text-gray-600">
                       <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">−</button>
-                      <span className="mx-2">{p.qty}</span>
+                      <span className={`mx-2 ${darkMode ? 'text-white/70' : ''}`}>{p.qty}</span>
                       <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+</button>
-                      <span className="ml-4">= FCFA {(p.qty * p.price).toFixed(2)}</span>
+                      <span className={`ml-4 ${darkMode ? 'text-white/70' : ''}`}>= FCFA {(p.qty * p.price).toFixed(2)}</span>
                     </div>
                   </div>
                   <button onClick={() => removeFromCart(p.id)} className="text-red-600 hover:text-red-800 ml-2" title="Supprimer du panier">
@@ -843,7 +830,7 @@ export default function App() {
               ))}
             </ul>
             <hr className="my-3" />
-            <div className="text-lg font-bold">Total : FCFA{total.toFixed(2)}</div>
+            <div className={`text-lg font-bold ${darkMode ? 'text-white/70' : ''}`}>Total : FCFA{total.toFixed(2)}</div>
             <div className="flex items-center gap-2 mt-4 flex-1">
               <input
                 type="checkbox"
@@ -852,7 +839,7 @@ export default function App() {
                 onChange={(e) => setGenerateInvoice(e.target.checked)}
                 className="h-4 w-4"
               />
-              <label htmlFor="generateInvoice" className="text-sm text-gray-700">
+              <label htmlFor="generateInvoice" className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-700'}`} >
                 Générer une facture PDF
               </label>
               {generateInvoice && (
@@ -876,7 +863,7 @@ export default function App() {
 
       {view === 'admin' && (
         <div>
-          <h2 className="text-2xl font-bold mb-4 text-gray-800">Produits</h2>
+          <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Produits</h2>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             {user.role === 'admin' &&
               <button onClick={() => setShowAddProduct(true)} className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
@@ -903,7 +890,7 @@ export default function App() {
                 <span className="w-3 h-3 rounded-full bg-yellow-400 inline-block"></span>
                 Faible ({stockFaible})
               </span>
-              <span className="flex items-center gap-1 text-gray-700">
+              <span className={`flex items-center gap-1 text-gray-700 ${darkMode ? 'text-white' : ''}`}>
                 <span className="w-3 h-3 rounded-full bg-gray-300 inline-block"></span>
                 OK ({stockOk})
               </span>
@@ -912,7 +899,7 @@ export default function App() {
 
           {showAddProduct && (
             <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-              <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative">
+              <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative overflow-y-auto max-h-full">
                 <button
                   onClick={() => setShowAddProduct(false)}
                   className="absolute top-2 right-2 text-gray-500 hover:text-black"
@@ -1010,36 +997,54 @@ export default function App() {
           )}
           <ul>
             {filteredProducts.map((p) => (
-              <li key={p.id} className={`mb-4 border rounded-xl p-4 flex items-center gap-6 shadow ${
-                p.stock === 0
-                ? 'bg-red-100 border-red-500'
-                : p.stock <= 2
-                ? 'bg-yellow-100 border-yellow-400'
-                : 'bg-white border-gray-300'
-              }`}>
+              <li
+                key={p.id}
+                className={`mb-4 border rounded-xl p-4 flex items-center gap-6 shadow-lg transition-colors duration-300
+                  ${
+                    p.stock === 0
+                      ? 'bg-red-100 dark:bg-red-900 border-red-500 dark:border-red-700'
+                      : p.stock <= 2
+                      ? 'bg-yellow-100 dark:bg-yellow-900 border-yellow-400 dark:border-yellow-600'
+                      : darkMode ? "border-slate-600 bg-slate-800" : "bg-white border-gray-300"
+                  }`}
+              >
                 {p.imageUrl ? (
-                  <img src={p.imageUrl} alt={p.name} className="w-20 h-20 object-contain rounded-lg" />
+                  <img
+                    src={p.imageUrl}
+                    alt={p.name}
+                    className="w-20 h-20 object-contain rounded-lg"
+                  />
                 ) : (
-                  <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                  <div className="w-20 h-20 bg-gray-100 dark:bg-slate-700 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-300">
                     Pas d’image
                   </div>
                 )}
+
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">{p.name}</h3>
-                  <p className="text-sm text-gray-500">SKU: {p.sku}</p>
-                  <p className="text-indigo-600 font-bold">FCFA{p.price}</p>
-                  <p className="text-gray-600">Stock: {p.stock}</p>
+                  <h3 className={`text-lg font-semibold ${darkMode ? "text-white" : "text-gray-900"}`}>
+                    {p.name}
+                  </h3>
+                  <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>SKU: {p.sku}</p>
+                  <p className={`font-bold ${darkMode ? "text-indigo-400" : "text-indigo-600"}`}>FCFA{p.price}</p>
+                  <p className={`${darkMode ? "text-gray-300" : "text-gray-600"}`}>Stock: {p.stock}</p>
                 </div>
-                {user.role === 'admin' && 
+
+                {user.role === 'admin' && (
                   <div className="flex gap-4">
-                    <button onClick={() => handleEditProduct(p)} className="text-yellow-600 hover:text-yellow-800 font-semibold">
+                    <button
+                      onClick={() => handleEditProduct(p)}
+                      className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300 font-semibold"
+                    >
                       <FaEdit />
                     </button>
-                    <button onClick={() => handleDeleteProduct(p.id)} className="text-red-600 hover:text-red-800 font-semibold">
+                    <button
+                      onClick={() => handleDeleteProduct(p.id)}
+                      className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-semibold"
+                    >
                       <FaTrash />
                     </button>
                   </div>
-                }
+                )}
               </li>
             ))}
           </ul>
@@ -1048,7 +1053,7 @@ export default function App() {
 
       {view === 'sales' && (
         <div className="p-4">
-          <h2 className="text-3xl font-bold mb-6 text-gray-800">🧾 Historique des ventes</h2>
+          <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>🧾 Historique des ventes</h2>
 
           {/* Filtres et export */}
           <div className="flex flex-wrap gap-3 mb-6">
@@ -1085,39 +1090,63 @@ export default function App() {
               }
 
               return (
-                <div key={s.id} className="border border-gray-200 rounded-xl p-5 bg-white shadow-sm hover:shadow-md transition">
-                  <div className="flex justify-between items-center mb-4">
+                <div
+                  key={s.id}
+                  className={`rounded-xl p-5 shadow-sm hover:shadow-md transition ${
+                    darkMode
+                      ? 'border border-slate-700 bg-slate-800 text-gray-100'
+                      : 'border border-gray-200 bg-white text-gray-800'
+                  }`}
+                >
+                  {/* En-tête vente */}
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-2">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-800">🧾 Vente #{s.id}</h3>
-                      <p className="text-sm text-gray-500">{new Date(s.date).toLocaleString()}</p>
-                      <p className="text-sm text-gray-500">Vendeur: <strong>{s.seller}</strong></p>
+                      <h3 className="text-lg font-semibold">
+                        🧾 Vente #{s.id}
+                      </h3>
+                      <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {new Date(s.date).toLocaleString()}
+                      </p>
+                      <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Vendeur: <span className={`${darkMode ? 'text-white' : 'text-black'} font-semibold`}>{s.seller}</span>
+                      </p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm text-gray-500">Total</span>
-                      <div className="text-xl font-bold text-green-600">FCFA {s.total.toFixed(2)}</div>
+                    <div className="text-left md:text-right">
+                      <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total</span>
+                      <div className={`text-xl font-bold ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                        FCFA {s.total.toFixed(2)}
+                      </div>
                     </div>
                   </div>
 
                   {/* Tableau des articles */}
                   <div className="overflow-x-auto w-full">
-                    <table className="min-w-full text-sm border border-gray-300 rounded-lg">
-                      <thead className="bg-gray-100 text-gray-700">
+                    <table
+                      className={`min-w-full text-sm border rounded-lg ${
+                        darkMode ? 'border-slate-700' : 'border-gray-300'
+                      }`}
+                    >
+                      <thead className={`${darkMode ? 'bg-slate-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
                         <tr>
-                          <th className="px-4 py-2 border">Produit</th>
-                          <th className="px-4 py-2 border">Sku</th>
-                          <th className="px-4 py-2 border">Quantité</th>
-                          <th className="px-4 py-2 border">Prix unitaire</th>
-                          <th className="px-4 py-2 border">Sous-total</th>
+                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Produit</th>
+                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>SKU</th>
+                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Quantité</th>
+                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Prix unitaire</th>
+                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Sous-total</th>
                         </tr>
                       </thead>
                       <tbody>
                         {items.map((item, idx) => (
-                          <tr key={idx} className="text-gray-800">
-                            <td className="px-4 py-2 border">{item.name}</td>
-                            <td className="px-4 py-2 border">{item.sku}</td>
-                            <td className="px-4 py-2 border text-center">{item.qty}</td>
-                            <td className="px-4 py-2 border text-right">FCFA {Number(item.price).toFixed(2)}</td>
-                            <td className="px-4 py-2 border text-right">FCFA {(item.price * item.qty).toFixed(2)}</td>
+                          <tr key={idx} className={`${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                            <td className={`px-4 py-2 border ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.name}</td>
+                            <td className={`px-4 py-2 border ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.sku}</td>
+                            <td className={`px-4 py-2 border text-center ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.qty}</td>
+                            <td className={`px-4 py-2 border text-right ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>
+                              FCFA {Number(item.price).toFixed(2)}
+                            </td>
+                            <td className={`px-4 py-2 border text-right ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>
+                              FCFA {(item.price * item.qty).toFixed(2)}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1131,8 +1160,8 @@ export default function App() {
       )}
       {view === 'charts' && (
         <div>
-          <h2 className="text-2xl font-bold mb-6 text-gray-800">📊 Statistiques des Ventes</h2>
-          <div className="mx-auto bg-white rounded-xl shadow p-6 mb-2">
+          <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-gray-800'}`}>📊 Statistiques des Ventes</h2>
+          <div className={`mx-auto rounded-xl shadow p-6 mb-2 ${darkMode ? 'bg-slate-900 shadow-lg border border-gray-100' : 'bg-white'}`}>
             <ResponsiveContainer width="100%" height={400}>
               <BarChart data={comparisonData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -1145,8 +1174,8 @@ export default function App() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="max-w-3xl mx-auto bg-white rounded-xl shadow p-6">
-            <h3 className="text-lg font-semibold mb-4">Produits les plus vendus</h3>
+          <div className={`max-w-3xl mx-auto rounded-xl shadow p-6 ${darkMode ? 'bg-slate-900 shadow-lg border border-gray-100' : 'bg-white'}`}>
+            <h3 className={`text-lg font-semibold mb-4 ${darkMode ? 'text-white' : ''}`}>Produits les plus vendus</h3>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -1171,174 +1200,267 @@ export default function App() {
       )}
       {view === 'settings' && (
         <div className="flex-grow relative">
-          <h2 className="text-center font-2xl font-bold mb-2">Paramètres</h2>
-          <div className="flex-grow flex pb-20">
+          <h2 className={`text-center font-2xl font-bold mb-2 ${darkMode ? 'text-white' : ''}`}>Paramètres</h2>
+          <div className="flex flex-grow flex pb-20">
             <div className="flex-grow flex justify-center items-center">
               {settingsSelectedMenu === 'informations' && (
-                <form 
-                  onSubmit={settingsSubmit}
-                  className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1"
+                <form
+                  onSubmit={showPasswordChange ? handlePasswordReset : settingsSubmit}
+                  className={`p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1 transition-colors duration-300
+                    ${darkMode ? 'bg-slate-800 text-gray-100 border border-gray-100' : 'bg-white text-gray-800'}`}
                 >
-                  <h2 className="text-center text-1xl font-bold">
-                    Mes informations
-                  </h2>
-                  <div>
-                    <label
-                      htmlFor="name"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Nom
-                    </label>
-                    <input
-                      type="text"
-                      name="name"
-                      id="name"
-                      placeholder="Nom"
-                      required
-                      onChange={(e) => {handleSettingsFieldChange(e)}}
-                      value={settingsMe.name}
-                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="surname"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Prénom
-                    </label>
-                    <input
-                      type="text"
-                      name="surname"
-                      id="surname"
-                      placeholder="Prénom"
-                      required
-                      onChange={(e) => {handleSettingsFieldChange(e)}}
-                      value={settingsMe.surname}
-                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="entreprise"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Entreprise
-                    </label>
-                    <input
-                      type="text"
-                      name="entreprise"
-                      id="entreprise"
-                      placeholder="Nom de l'entreprise"
-                      disabled={user.role !== 'admin'}
-                      onChange={(e) => {handleSettingsFieldChange(e)}}
-                      value={settingsMe.entreprise}
-                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="adresse"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Adresse
-                    </label>
-                    <input
-                      type="text"
-                      name="adresse"
-                      id="adresse"
-                      placeholder="Adresse de l'entreprise"
-                      onChange={(e) => {handleSettingsFieldChange(e)}}
-                      value={settingsMe.adresse}
-                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="phone"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Téléphone
-                    </label>
-                    <input
-                      type="text"
-                      name="phone"
-                      id="phone"
-                      placeholder="Téléphone"
-                      required
-                      onChange={(e) => {handleSettingsFieldChange(e)}}
-                      value={settingsMe.phone}
-                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="email"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      id="email"
-                      placeholder="Email"
-                      required
-                      onChange={(e) => {handleSettingsFieldChange(e)}}
-                      value={settingsMe.email}
-                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  {user.role === 'admin' &&
-                    <div className="mb-6">
-                      <label className="block mb-1 font-medium text-gray-700">
-                        Logo
-                      </label>
-                      <input
-                        type="file"
-                        name="logo"
-                        id="logo"
-                        accept="image/*"
-                        className="w-full"
-                        onChange={(e) => {handleSettingsLogoChange(e)}}
-                      />
-                    </div>
-                  }
-                  <div>
-                    <label
-                      htmlFor="username"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Nom d'utilisateur
-                    </label>
-                    <input
-                      type="text"
-                      name="username"
-                      id="username"
-                      required
-                      onChange={(e) => {handleSettingsFieldChange(e)}}
-                      value={settingsMe.username}
-                      className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
+                  <h2 className="text-center font-bold">{showPasswordChange ? 'Changer le mot de passe' : 'Mes informations'}</h2>
+                  {!showPasswordChange && (
+                    <>
+                      {/* Nom */}
+                      <div>
+                        <label
+                          htmlFor="name"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Nom <span className='text-red-800'>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="name"
+                          id="name"
+                          placeholder="Nom"
+                          required
+                          onChange={handleSettingsFieldChange}
+                          value={settingsMe.name}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                        />
+                      </div>
+
+                      {/* Prénom */}
+                      <div>
+                        <label
+                          htmlFor="surname"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Prénom <span className='text-red-800'>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="surname"
+                          id="surname"
+                          placeholder="Prénom"
+                          required
+                          onChange={handleSettingsFieldChange}
+                          value={settingsMe.surname}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                        />
+                      </div>
+
+                      {/* Entreprise */}
+                      <div>
+                        <label
+                          htmlFor="entreprise"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Entreprise
+                        </label>
+                        <input
+                          type="text"
+                          name="entreprise"
+                          id="entreprise"
+                          placeholder="Nom de l'entreprise"
+                          disabled={user.role !== 'admin'}
+                          onChange={handleSettingsFieldChange}
+                          value={settingsMe.entreprise}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                        />
+                      </div>
+
+                      {/* Adresse */}
+                      <div>
+                        <label
+                          htmlFor="adresse"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Adresse
+                        </label>
+                        <input
+                          type="text"
+                          name="adresse"
+                          id="adresse"
+                          placeholder="Adresse de l'entreprise"
+                          onChange={handleSettingsFieldChange}
+                          value={settingsMe.adresse}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                        />
+                      </div>
+
+                      {/* Téléphone */}
+                      <div>
+                        <label
+                          htmlFor="phone"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Téléphone
+                        </label>
+                        <input
+                          type="text"
+                          name="phone"
+                          id="phone"
+                          placeholder="Téléphone"
+                          required
+                          onChange={handleSettingsFieldChange}
+                          value={settingsMe.phone}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                        />
+                      </div>
+
+                      {/* Email */}
+                      <div>
+                        <label
+                          htmlFor="email"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          name="email"
+                          id="email"
+                          placeholder="Email"
+                          required
+                          onChange={handleSettingsFieldChange}
+                          value={settingsMe.email}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                        />
+                      </div>
+
+                      {/* Logo - admin seulement */}
+                      {user.role === 'admin' && (
+                        <div>
+                          <label
+                            htmlFor="logo"
+                            className={`block mb-1 font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                          >
+                            Logo
+                          </label>
+                          <input
+                            type="file"
+                            name="logo"
+                            id="logo"
+                            accept="image/*"
+                            className={`w-full ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
+                            onChange={handleSettingsLogoChange}
+                          />
+                        </div>
+                      )}
+
+                      {/* Username */}
+                      <div>
+                        <label
+                          htmlFor="username"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Nom d'utilisateur <span className='text-red-800'>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="username"
+                          id="username"
+                          required
+                          onChange={handleSettingsFieldChange}
+                          value={settingsMe.username}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                        />
+                      </div>
+                    </>
+                  )}
+                  {showPasswordChange && (
+                    <>
+                      <div>
+                        <label
+                          htmlFor="oldPassword"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Ancien mot de passe <span className='text-red-800'>*</span>
+                        </label>
+                        <input
+                          type="password"
+                          name="oldPassword"
+                          id="oldPassword"
+                          value={oldPassword}
+                          onChange={(e) => setOldPassword(e.target.value)}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="newPassword"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Nouveau mot de passe <span className='text-red-800'>*</span>
+                        </label>
+                        <input
+                          type="password"
+                          name="newPassword"
+                          id="newPassword"
+                          placeholder='Minimum 6 caractères'
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="confirmPassword"
+                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                        >
+                          Confirmer le mot de passe <span className='text-red-800'>*</span>
+                        </label>
+                        <input
+                          type="password"
+                          name="confirmPassword"
+                          id="confirmPassword"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                          required
+                        />
+                      </div>
+                    </>
+                  )}
+                  {/* Boutons */}
                   <button
                     type="submit"
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
                   >
                     Enregistrer
                   </button>
-                  <button 
+
+                  <button
                     type="button"
-                    className="w-full text-blue-700"
+                    onClick={() => setShowPasswordChange(!showPasswordChange)}
+                    className={`w-full text-sm underline font-medium ${
+                      darkMode ? 'text-blue-400' : 'text-blue-700'
+                    }`}
                   >
-                    Changer mon mot de passe
+                    {showPasswordChange ? 'Annuler' : 'Changer mon mot de passe'}
                   </button>
                 </form>
+
               )}
               {settingsSelectedMenu === 'utilisateurs' && (
                 <>
                   <div className='flex flex-col'>
-                    <h1 className="text-3xl font-bold mb-6 text-gray-800 text-center">Gestion des utilisateurs</h1>
+                    <h1 className={`text-3xl font-bold mb-6 text-gray-800 text-center ${darkMode ? 'text-white' : ''}`}>Gestion des utilisateurs</h1>
 
                     <div className="flex justify-end gap-4 mb-6">
                       <div className="relative flex-1">
@@ -1381,7 +1503,7 @@ export default function App() {
                               htmlFor="name"
                               className="block text-sm font-medium text-gray-700"
                             >
-                              Nom
+                              Nom <span className='text-red-600'>*</span>
                             </label>
                             <input
                               type="text"
@@ -1399,7 +1521,7 @@ export default function App() {
                               htmlFor="surname"
                               className="block text-sm font-medium text-gray-700"
                             >
-                              Prénom
+                              Prénom <span className='text-red-600'>*</span>
                             </label>
                             <input
                               type="text"
@@ -1434,7 +1556,7 @@ export default function App() {
                               htmlFor="phone"
                               className="block text-sm font-medium text-gray-700"
                             >
-                              Téléphone
+                              Téléphone <span className='text-red-600'>*</span>
                             </label>
                             <input
                               type="text"
@@ -1452,14 +1574,13 @@ export default function App() {
                               htmlFor="email"
                               className="block text-sm font-medium text-gray-700"
                             >
-                              Email
+                              Email <span className='text-red-600'>*</span>
                             </label>
                             <input
                               type="email"
                               name="email"
                               id="email"
                               placeholder="Email"
-                              required
                               onChange={(e) => setEmployeesFormData({...employeesFormData, email: e.target.value})}
                               value={employeesFormData.email}
                               className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
@@ -1470,7 +1591,7 @@ export default function App() {
                               htmlFor="username"
                               className="block text-sm font-medium text-gray-700"
                             >
-                              Nom d'utilisateur
+                              Nom d'utilisateur <span className='text-red-600'>*</span>
                             </label>
                             <input
                               type="text"
@@ -1499,7 +1620,7 @@ export default function App() {
                               htmlFor="password"
                               className="block text-sm font-medium text-gray-700"
                             >
-                              Mot de passe
+                              Mot de passe <span className='text-red-600'>*</span>
                             </label>
                             <input
                               type="password"
@@ -1527,9 +1648,14 @@ export default function App() {
                       }
                     </div>
 
-                    <div className="bg-white rounded-xl shadow overflow-hidden">
-                      <table className="w-full table-auto">
-                        <thead className="bg-gray-100">
+                    <div
+                      className={`rounded-xl shadow overflow-hidden transition ${
+                        darkMode ? 'bg-slate-800 text-gray-100' : 'bg-white text-gray-800'
+                      }`}
+                    >
+                      {/* Table mode (desktop et tablette) */}
+                      <table className="w-full table-auto hidden md:table">
+                        <thead className={darkMode ? 'bg-slate-700 text-gray-200' : 'bg-gray-100 text-gray-700'}>
                           <tr>
                             <th className="text-left px-4 py-3">Nom</th>
                             <th className="text-left px-4 py-3">Prenom</th>
@@ -1544,13 +1670,18 @@ export default function App() {
                         <tbody>
                           {subUsersFiltered.length === 0 ? (
                             <tr>
-                              <td colSpan="4" className="text-center py-6 text-gray-500">
+                              <td
+                                colSpan="8"
+                                className={`text-center py-6 ${
+                                  darkMode ? 'text-gray-400' : 'text-gray-500'
+                                }`}
+                              >
                                 Aucun utilisateur trouvé.
                               </td>
                             </tr>
                           ) : (
-                            subUsersFiltered.map(subUser => (
-                              <tr key={subUser.id} className="border-t">
+                            subUsersFiltered.map((subUser) => (
+                              <tr key={subUser.id} className={darkMode ? 'border-t border-slate-700' : 'border-t border-gray-200'}>
                                 <td className="px-4 py-3">{subUser.name}</td>
                                 <td className="px-4 py-3">{subUser.surname}</td>
                                 <td className="px-4 py-3">{subUser.username}</td>
@@ -1559,10 +1690,28 @@ export default function App() {
                                 <td className="px-4 py-3">{subUser.adresse}</td>
                                 <td className="px-4 py-3">{subUser.role}</td>
                                 <td className="px-4 py-3 text-right space-x-3">
-                                  <button className="text-yellow-600 hover:text-yellow-800">
+                                  <button 
+                                    className="text-yellow-500 hover:text-yellow-400"
+                                    onClick={() => {
+                                      setSubUserId(subUser.id);
+                                      setEditedSubUserData({
+                                        name: subUser.name,
+                                        surname: subUser.surname,
+                                        username: subUser.username,
+                                        phone: subUser.phone,
+                                        email: subUser.email,
+                                        adresse: subUser.adresse,
+                                        role: subUser.role,
+                                        password: ''
+                                      })
+                                    }}  
+                                  >
                                     <FaEdit />
                                   </button>
-                                  <button className="text-red-600 hover:text-red-800">
+                                  <button 
+                                    className="text-red-500 hover:text-red-400"
+                                    onClick={() => setSubUserToDelete(subUser.id)}
+                                  >
                                     <FaTrash />
                                   </button>
                                 </td>
@@ -1571,12 +1720,140 @@ export default function App() {
                           )}
                         </tbody>
                       </table>
+                      {subUserToDelete && (
+                        <div className={`fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50`}>
+                          <div className={`p-6 rounded-lg shadow-lg w-full max-w-sm border
+                            ${darkMode ? 'bg-slate-800 border-gray-100 text-white' : 'bg-white border-gray-300 text-gray-800'}`}>
+                            
+                            <h3 className="text-lg font-semibold mb-4 text-center">
+                              Confirmer la suppression ?
+                            </h3>
+                            <p className="text-center mb-6 text-red-600">
+                              Cette action est <strong>irréversible</strong>.
+                            </p>
+
+                            <div className="flex justify-between gap-4">
+                              <button
+                                onClick={() => handleDeleteSubUser(subUserToDelete)}
+                                className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+                              >
+                                Supprimer
+                              </button>
+                              <button
+                                onClick={() => setSubUserToDelete(null)}
+                                className={`flex-1 px-4 py-2 rounded font-semibold transition
+                                  ${darkMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-gray-300 hover:bg-gray-400'}`}
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Mobile card mode */}
+                      <div className={darkMode ? 'md:hidden divide-y divide-slate-700' : 'md:hidden divide-y divide-gray-200'}>
+                        {subUsersFiltered.length === 0 ? (
+                          <p className={`text-center py-6 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            Aucun utilisateur trouvé.
+                          </p>
+                        ) : (
+                          subUsersFiltered.map((subUser) => (
+                            <div key={subUser.id} className="p-4">
+                              <p>
+                                <span className="font-semibold">Nom:</span> {subUser.name}
+                              </p>
+                              <p>
+                                <span className="font-semibold">Prénom:</span> {subUser.surname}
+                              </p>
+                              <p>
+                                <span className="font-semibold">Username:</span> {subUser.username}
+                              </p>
+                              <p>
+                                <span className="font-semibold">Téléphone:</span> {subUser.phone}
+                              </p>
+                              <p>
+                                <span className="font-semibold">Email:</span> {subUser.email}
+                              </p>
+                              <p>
+                                <span className="font-semibold">Adresse:</span> {subUser.adresse}
+                              </p>
+                              <p>
+                                <span className="font-semibold">Rôle:</span> {subUser.role}
+                              </p>
+                              <div className="flex justify-end space-x-3 mt-2">
+                                <button 
+                                  className="text-yellow-500 hover:text-yellow-400"
+                                  onClick={() => {
+                                    setSubUserId(subUser.id);
+                                    setEditedSubUserData({
+                                      name: subUser.name,
+                                      surname: subUser.surname,
+                                      username: subUser.username,
+                                      phone: subUser.phone,
+                                      email: subUser.email,
+                                      adresse: subUser.adresse,
+                                      role: subUser.role,
+                                      password: ''
+                                    })
+                                  }} 
+                                >
+                                  <FaEdit />
+                                </button>
+                                <button 
+                                  className="text-red-500 hover:text-red-400"
+                                  onClick={() => setSubUserToDelete(subUser.id)}
+                                >
+                                  <FaTrash />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {subUserToDelete && (
+                          <div className={`fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50`}>
+                            <div className={`p-6 rounded-lg shadow-lg w-full max-w-sm border
+                              ${darkMode ? 'bg-slate-800 border-gray-100 text-white' : 'bg-white border-gray-300 text-gray-800'}`}>
+                              
+                              <h3 className="text-lg font-semibold mb-4 text-center">
+                                Confirmer la suppression ?
+                              </h3>
+                              <p className="text-center mb-6">
+                                Cette action est <strong>irréversible</strong>.
+                              </p>
+
+                              <div className="flex justify-between gap-4">
+                                <button
+                                  onClick={() => handleDeleteSubUser(subUserToDelete)}
+                                  className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+                                >
+                                  Supprimer
+                                </button>
+                                <button
+                                  onClick={() => setSubUserToDelete(null)}
+                                  className={`flex-1 px-4 py-2 rounded font-semibold transition
+                                    ${darkMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-gray-300 hover:bg-gray-400'}`}
+                                >
+                                  Annuler
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
+                    {subUserId && (
+                      <SubUserEditForm handleEditSubUserSubmit={handleEditSubUserSubmit} darkMode={darkMode} editedSubUserData={editedSubUserData}
+                        setEditedSubUserData={setEditedSubUserData} setSubUserId={setSubUserId}
+                      />
+                    )}
                   </div>
                 </>
               )}
               {settingsSelectedMenu === 'apropos' && (
-                <h1 className="text-2xl font-bold">A Propos</h1>
+                <>
+                  <AboutPage darkMode={darkMode}/>
+                </>
               )}
             </div>
           </div>
@@ -1622,9 +1899,27 @@ export default function App() {
           </div>
         </div>
       )}
-      {aiResult && (
-        <div className="mt-4 p-4 bg-white rounded shadow text-sm whitespace-pre-wrap">
-          {aiResult}
+      {view == 'analyse' && (
+        // {analyserAvecIA}
+        <div className={`p-6 max-w-3xl mx-auto`}>
+          <h2 className={`text-2xl font-bold mb-4 text-center ${darkMode ? 'text-white' : 'text-indigo-700'}`}>🔍 Analyse IA des ventes</h2>
+          
+          <div className="text-center mb-6">
+            <button 
+              onClick={handleAnalyseIA}
+              disabled={loadingAI}
+              className={`${user.tokens_conseil == 0 ? 'bg-red-600': 'bg-purple-600'} hover:bg-purple-700 text-white px-6 py-2 rounded shadow`}>
+              {loadingAI ? "Analyse en cours..." : "Lancer l’analyse"}
+            </button>
+          </div>
+
+          {analyseMarkDown && (
+            <div className={`prose prose-lg w-full p-4 rounded-xl shadow border overflow-auto break-words
+              ${darkMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white'}`
+              }>
+              <ReactMarkdown>{analyseMarkDown}</ReactMarkdown>
+            </div>
+          )}
         </div>
       )}
       {/* Bouton panier mobile */}
@@ -1645,23 +1940,23 @@ export default function App() {
           ></div>
 
           {/* Drawer panier */}
-          <div className="relative z-50 w-80 max-w-full bg-white shadow-xl h-full p-4 overflow-y-auto">
+          <div className={`relative z-50 w-80 max-w-full shadow-xl h-full p-4 overflow-y-auto ${darkMode ? 'bg-slate-800' : 'bg-white'}`}>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <FaShoppingCart /> Panier
+              <h2 className={`text-xl font-bold flex items-center gap-2 text-xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : ''}`}>
+                <FaShoppingCart className={`${darkMode ? 'text-white' : ''}`}/> Panier
               </h2>
-              <button onClick={() => setCartOpen(false)} className="text-gray-600 text-xl">✕</button>
+              <button onClick={() => setCartOpen(false)} className={`text-xl ${darkMode ? 'text-white' : 'text-gray-600'}`}>✕</button>
             </div>
 
             <ul>
               {cart.map((p) => (
                 <li key={p.id} className="mb-3 flex justify-between items-center">
                   <div className="flex-1">
-                    <div className="font-semibold">{p.name}</div>
-                    <div className="text-sm text-gray-600">
-                      <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">−</button>
+                    <div className={`font-semibold ${darkMode ? 'text-white' : ''}`}>{p.name}</div>
+                    <div className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-600'}`}>
+                      <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-black">−</button>
                       <span className="mx-2">{p.qty}</span>
-                      <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+</button>
+                      <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-black">+</button>
                       <span className="ml-4">= FCFA {(p.qty * p.price).toFixed(2)}</span>
                     </div>
                   </div>
@@ -1673,7 +1968,7 @@ export default function App() {
             </ul>
 
             <hr className="my-3" />
-            <div className="text-lg font-bold">Total : FCFA{total.toFixed(2)}</div>
+            <div className={`text-lg font-bold ${darkMode ? 'text-white/70' : ''}`}>Total : FCFA{total.toFixed(2)}</div>
             <div className="flex items-center gap-2 mt-4">
               <input
                 type="checkbox"
@@ -1682,7 +1977,7 @@ export default function App() {
                 onChange={(e) => setGenerateInvoice(e.target.checked)}
                 className="h-4 w-4"
               />
-              <label htmlFor="generateInvoice" className="text-sm text-gray-700">
+              <label htmlFor="generateInvoice" className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-700'}`}>
                 Générer une facture PDF
               </label>
               {generateInvoice && (
