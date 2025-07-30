@@ -139,7 +139,9 @@ def send_reset_email(email, reset_code):
 
 
 def is_safe_path(base_dir, path):
-    return os.path.abspath(path).startswith(os.path.abspath(base_dir))
+    basedir = os.path.abspath(base_dir)
+    path = os.path.abspath(os.path.normpath(path))
+    return os.path.commonprefix([path, basedir]) == basedir
 
 @app.route('/api/theme', methods=['PUT'])
 @login_required
@@ -186,7 +188,7 @@ def register():
     if logo and allowed_file(logo.filename):
         filename = secure_filename(logo.filename)
         filename = f"{username}_{filename}"
-        
+
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"logo")
         os.makedirs(filepath, exist_ok=True)
         logo_dir = os.path.join(filepath, filename)
