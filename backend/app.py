@@ -186,8 +186,15 @@ def register():
     if logo and allowed_file(logo.filename):
         filename = secure_filename(logo.filename)
         filename = f"{username}_{filename}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"logo/{filename}")
-        logo.save(filepath)
+        
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"logo")
+        os.makedirs(filepath, exist_ok=True)
+        logo_dir = os.path.join(filepath, filename)
+
+        if not is_safe_path(app.config['UPLOAD_FOLDER'], logo_dir):
+            return jsonify({'error': 'Chemin non autorisé'}), 400
+
+        logo.save(logo_dir)
         logo_url = filename
     else:
         logo_url = f"logo.jpg"  # Logo par défaut
