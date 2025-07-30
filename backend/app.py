@@ -139,7 +139,9 @@ def send_reset_email(email, reset_code):
 
 
 def is_safe_path(base_dir, path):
-    return os.path.abspath(path).startswith(os.path.abspath(base_dir))
+    basedir = os.path.abspath(base_dir)
+    path = os.path.abspath(os.path.normpath(path))
+    return os.path.commonprefix([path, basedir]) == basedir
 
 @app.route('/api/theme', methods=['PUT'])
 @login_required
@@ -171,6 +173,7 @@ def register():
     phone = request.form.get('phone', '').strip()
     email = request.form.get('email', '').strip()
     logo = request.files.get('logo', None)
+    safe_username = secure_filename(username)
 
     # Contrôles basiques
     if not username or not password or not name or not surname:
@@ -185,9 +188,18 @@ def register():
     logo_url = None
     if logo and allowed_file(logo.filename):
         filename = secure_filename(logo.filename)
-        filename = f"{username}_{filename}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"logo/{filename}")
-        logo.save(filepath)
+        filename = f"{safe_username}_{filename}"
+
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], "logo")
+        os.makedirs(filepath, exist_ok=True)
+        logo_dir = os.path.join(filepath, filename)
+        # Normalize and check that logo_dir is within the intended upload folder
+        normalized_logo_dir = os.path.normpath(logo_dir)
+        upload_root = os.path.abspath(app.config['UPLOAD_FOLDER'])
+        if not normalized_logo_dir.startswith(upload_root):
+            return jsonify({'error': 'Chemin non autorisé'}), 400
+
+        logo.save(normalized_logo_dir)
         logo_url = filename
     else:
         logo_url = f"logo.jpg"  # Logo par défaut
@@ -519,21 +531,20 @@ def update_settings():
         if not allowed_file(filename):
             return jsonify({'error': 'Format de fichier non autorisé'}), 400
 
-        # Nouveau nom de fichier
-        filename = f"{username}_{filename}"
+        # Sanitize username as well
+        safe_username = secure_filename(username)
+        filename = f"{safe_username}_{filename}"
 
-        # Répertoire cible
-        upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'logo')
-
-        # Chemin complet du fichier à enregistrer
-        logo_path = os.path.join(upload_dir, filename)
-
-        # Validation du chemin complet pour éviter le path traversal
-        if not is_safe_path(upload_dir, logo_path):
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], "logo")
+        os.makedirs(filepath, exist_ok=True)
+        logo_dir = os.path.join(filepath, filename)
+        # Normalize the path and check containment
+        normalized_logo_dir = os.path.normpath(logo_dir)
+        upload_folder_abs = os.path.abspath(app.config['UPLOAD_FOLDER'])
+        if not normalized_logo_dir.startswith(upload_folder_abs):
             return jsonify({'error': 'Chemin non autorisé'}), 400
 
-        # Enregistrement du fichier
-        logo.save(logo_path)
+        logo.save(normalized_logo_dir)
         user.logo = filename
 
         db.session.commit()
