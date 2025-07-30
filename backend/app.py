@@ -173,6 +173,7 @@ def register():
     phone = request.form.get('phone', '').strip()
     email = request.form.get('email', '').strip()
     logo = request.files.get('logo', None)
+    safe_username = secure_filename(username)
 
     # Contrôles basiques
     if not username or not password or not name or not surname:
@@ -187,16 +188,18 @@ def register():
     logo_url = None
     if logo and allowed_file(logo.filename):
         filename = secure_filename(logo.filename)
-        filename = f"{username}_{filename}"
+        filename = f"{safe_username}_{filename}"
 
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"logo")
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], "logo")
         os.makedirs(filepath, exist_ok=True)
         logo_dir = os.path.join(filepath, filename)
-
-        if not is_safe_path(app.config['UPLOAD_FOLDER'], logo_dir):
+        # Normalize and check that logo_dir is within the intended upload folder
+        normalized_logo_dir = os.path.normpath(logo_dir)
+        upload_root = os.path.abspath(app.config['UPLOAD_FOLDER'])
+        if not normalized_logo_dir.startswith(upload_root):
             return jsonify({'error': 'Chemin non autorisé'}), 400
 
-        logo.save(logo_dir)
+        logo.save(normalized_logo_dir)
         logo_url = filename
     else:
         logo_url = f"logo.jpg"  # Logo par défaut
