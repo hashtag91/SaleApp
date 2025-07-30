@@ -528,21 +528,17 @@ def update_settings():
         if not allowed_file(filename):
             return jsonify({'error': 'Format de fichier non autorisé'}), 400
 
-        # Nouveau nom de fichier
+        filename = secure_filename(logo.filename)
         filename = f"{username}_{filename}"
 
-        # Répertoire cible
-        upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'logo')
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"logo")
+        os.makedirs(filepath, exist_ok=True)
+        logo_dir = os.path.join(filepath, filename)
 
-        # Chemin complet du fichier à enregistrer
-        logo_path = os.path.join(upload_dir, filename)
-
-        # Validation du chemin complet pour éviter le path traversal
-        if not is_safe_path(upload_dir, logo_path):
+        if not is_safe_path(app.config['UPLOAD_FOLDER'], logo_dir):
             return jsonify({'error': 'Chemin non autorisé'}), 400
 
-        # Enregistrement du fichier
-        logo.save(logo_path)
+        logo.save(logo_dir)
         user.logo = filename
 
         db.session.commit()
