@@ -1,5 +1,5 @@
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, jsonify, request, send_file, send_from_directory, session, abort
+from flask import Flask, jsonify, request, send_file, send_from_directory, session, abort, current_app
 from flask_login import login_user, logout_user, current_user, UserMixin, LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -136,6 +136,10 @@ def send_reset_email(email, reset_code):
                   recipients=[email])
     msg.body = f"Votre code de réinitialisation est : {reset_code} pour réinitialiser votre mot de passe. Ce code est valable pendant 30 minutes."
     mail.send(msg)
+
+
+def is_safe_path(base_dir, path):
+    return os.path.abspath(path).startswith(os.path.abspath(base_dir))
 
 @app.route('/api/theme', methods=['PUT'])
 @login_required
@@ -508,17 +512,32 @@ def update_settings():
     user.entreprise = entreprise
     user.adresse = adresse
 
+    
     if logo:
         filename = secure_filename(logo.filename)
+
         if not allowed_file(filename):
             return jsonify({'error': 'Format de fichier non autorisé'}), 400
+
+        # Nouveau nom de fichier
         filename = f"{username}_{filename}"
-        logo_path = os.path.join(app.config['UPLOAD_FOLDER'], 'logo', filename)
+
+        # Répertoire cible
+        upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'logo')
+
+        # Chemin complet du fichier à enregistrer
+        logo_path = os.path.join(upload_dir, filename)
+
+        # Validation du chemin complet pour éviter le path traversal
+        if not is_safe_path(upload_dir, logo_path):
+            return jsonify({'error': 'Chemin non autorisé'}), 400
+
+        # Enregistrement du fichier
         logo.save(logo_path)
         user.logo = filename
 
-    db.session.commit()
-    return jsonify({'message': 'Paramètres mis à jour avec succès.'})
+        db.session.commit()
+        return jsonify({'message': 'Paramètres mis à jour avec succès.'})
 
 @app.route('/api/products', methods=['GET'])
 @login_required
