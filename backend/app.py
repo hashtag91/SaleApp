@@ -59,6 +59,7 @@ class Product(db.Model):
     price = db.Column(db.Float, nullable=False)
     buy_price = db.Column(db.Float, nullable=True)
     stock = db.Column(db.Integer, default=0)
+    alert = db.Column(db.Integer, default=5)
     image_url = db.Column(db.String(200))
     parent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Pour les employés
 
@@ -547,8 +548,8 @@ def update_settings():
         logo.save(normalized_logo_dir)
         user.logo = filename
 
-        db.session.commit()
-        return jsonify({'message': 'Paramètres mis à jour avec succès.'})
+    db.session.commit()
+    return jsonify({'message': 'Paramètres mis à jour avec succès.'})
 
 @app.route('/api/products', methods=['GET'])
 @login_required
@@ -565,6 +566,7 @@ def get_products():
         'price': p.price,
         'buy_price': p.buy_price,
         'stock': p.stock,
+        'alert': p.alert,
         'imageUrl': p.image_url
     } for p in products])
 
@@ -579,6 +581,7 @@ def add_product():
     price = request.form.get('price')
     buy_price = request.form.get('buy_price')
     stock = request.form.get('stock')
+    alert = request.form.get('alert')
 
     if not sku or not name or not price or not buy_price or not stock:
         return jsonify({'error': 'Champs requis'}), 400
@@ -601,6 +604,7 @@ def add_product():
         price=float(price),
         buy_price=float(buy_price),
         stock=int(stock),
+        alert=int(alert),
         image_url=image_url,
         parent_id=current_user.parent_id or current_user.id,  # Pour les employés, on utilise parent_id (id de l'admin) pour lier le produit à l'entreprise
     )
@@ -641,6 +645,7 @@ def update_product(id):
     price = request.form.get('price')
     buy_price = request.form.get('buy_price')
     stock = request.form.get('stock')
+    alert = request.form.get('alert')
 
     if sku and sku != p.sku:
         if Product.query.filter_by(sku=sku).first():
@@ -651,6 +656,7 @@ def update_product(id):
     if price: p.price = float(price)
     if buy_price: p.buy_price = float(buy_price)
     if stock: p.stock = int(stock)
+    if alert: p.alert = int(alert)
 
     if 'image' in request.files:
         image = request.files['image']
@@ -661,7 +667,7 @@ def update_product(id):
             p.image_url = f"/static/uploads/{filename}"
 
     db.session.commit()
-    return jsonify({'message': 'Product updated'})
+    return jsonify({'message': 'Produit mis à jour avec succès'})
 
 @app.route('/api/products/<int:id>', methods=['DELETE'])
 @login_required

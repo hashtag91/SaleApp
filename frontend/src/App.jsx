@@ -77,11 +77,11 @@ export default function App() {
   const [settingsMe, setSettingsMe] = useState({name: "", surname: "", username: "", phone: "", email: "", entreprise: "", adresse: "", logo: null, role:''})
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null });
+  const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', buy_price: '', stock: 0, alert: 5, image: null});
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editProduct, setEditProduct] = useState(null);
-  const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', sku: '', image: null });
+  const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', alert: '', sku: '', image: null });
   const [stockFilter, setStockFilter] = useState('all');
   const [analyseMarkDown, setAnalyseMarkDown] = useState("");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -386,10 +386,11 @@ export default function App() {
   const submitNewProduct = async (e) => {
     e.preventDefault();
 
-    const { name, sku, price, stock } = newProduct;
+    const { name, sku, price, stock, alert } = newProduct;
     if (!name || !sku || !price || !stock) return toast.warning("Tous les champs sont requis.");
     if (isNaN(price) || price <= 0) return toast.warning("Prix invalide");
     if (isNaN(stock) || stock < 0) return toast.warning("Stock invalide");
+    if (isNaN(alert) || stock < 0) return toast.warning("Stock alert invalide");
 
     const formData = new FormData();
     Object.entries(newProduct).forEach(([key, val]) => {
@@ -409,7 +410,7 @@ export default function App() {
 
     toast.success('Produit ajouté');
     setShowAddProduct(false);
-    setNewProduct({ name: '', sku: '', price: '', buy_price: '', stock: '', image: null,  });
+    setNewProduct({ name: '', sku: '', price: '', buy_price: '', stock: 0, alert: 0, image: null,  });
     loadProducts();
   };
 
@@ -421,6 +422,7 @@ export default function App() {
       price: product.price,
       buy_price: product.buy_price,
       stock: product.stock,
+      alert: product.alert,
       sku: product.sku || '',
       image: null,
     });
@@ -438,9 +440,10 @@ export default function App() {
   async function submitEditProduct(e) {
     e.preventDefault();
 
-    const { name, sku, price, stock, buy_price } = editedProduct;
-    if (!name || !sku || !price || !stock) return toast.warning("Champs manquants.");
-    if (isNaN(price) || price <= 0 || isNaN(stock) || stock < 0) return toast.warning("Prix ou stock invalide");
+    const { name, sku, price, stock, buy_price} = editedProduct;
+    if (!name || !sku || !price || !stock || !buy_price) return toast.warning("Champs manquants.");
+    if (isNaN(price) || price <= 0) return toast.warning("Prix invalide");
+    if (isNaN(stock) || stock <= 0) return toast.warning("Quantité invalide");
 
     const formData = new FormData();
     Object.entries(editedProduct).forEach(([key, val]) => {
@@ -459,6 +462,7 @@ export default function App() {
       setProducts(products.map(p => p.id === updatedProduct.id ? updatedProduct : p));
       setEditProduct(null);
       loadProducts();
+      toast.success(updatedProduct.message || "Produit modifié avec succès !");
     } catch (error) {
       toast.error(error.message);
     }
@@ -488,8 +492,8 @@ export default function App() {
     const matchStock =
       stockFilter === 'all' ? true :
       stockFilter === 'rupture' ? p.stock === 0 :
-      stockFilter === 'low' ? p.stock > 0 && p.stock <= 2 :
-      stockFilter === 'ok' ? p.stock > 2 : true;
+      stockFilter === 'low' ? p.stock <= p.alert:
+      stockFilter === 'ok' ? p.stock > p.alert : true;
 
     return matchSearch && matchStock;
   });
@@ -742,7 +746,7 @@ export default function App() {
           <FaShoppingCart /> Caisse
         </button>
         <button onClick={() => { setView('admin'); loadProducts(); }} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'admin' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
-          <FaBox /> Produits
+          <FaBox /> Stock
         </button>
         <button onClick={() => { setView('sales'); loadSales(); }} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'sales' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
           <FaCreditCard /> Ventes
@@ -863,7 +867,7 @@ export default function App() {
 
       {view === 'admin' && (
         <div>
-          <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Produits</h2>
+          <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Stock</h2>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             {user.role === 'admin' &&
               <button onClick={() => setShowAddProduct(true)} className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
@@ -911,24 +915,48 @@ export default function App() {
 
                 <form onSubmit={submitNewProduct} className="w-full border p-4 sm:p-6 rounded-xl bg-white shadow">
                   <div className="mb-4">
-                    <label className="block mb-1 font-medium text-gray-700">Nom</label>
+                    <label className="block mb-1 font-medium text-gray-700">Nom <span className='text-red-900'>*</span></label>
                     <input type="text" name="name" value={newProduct.name} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-4">
-                    <label className="block mb-1 font-medium text-gray-700">SKU</label>
+                    <div className='flex'>
+                      <label className="block mb-1 font-medium text-gray-700 mr-2">SKU</label>
+                      <div class="relative">
+                        <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
+                          ?
+                        </span>
+                        <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
+                          SKU est le numéro d'identifiant unique que vous attribuez à un produit dans le stock pour faciliter son identification.
+                        </div>
+                      </div>
+                    </div>
                     <input type="text" name="sku" value={newProduct.sku} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-4">
-                    <label className="block mb-1 font-medium text-gray-700">Prix (FCFA)</label>
+                    <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
                     <input type="number" name="price" step="0.01" value={newProduct.price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-4">
-                    <label htmlFor="" className="bloc mb-1 font-medium text-gray-700">Prix d'achat (FCFA)</label>
+                    <label htmlFor="" className="bloc mb-1 font-medium text-gray-700">Prix d'achat (FCFA) <span className='text-red-900'>*</span></label>
                     <input type="number" name="buy_price" value={newProduct.buy_price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2" required/>
                   </div>
                   <div className="mb-4">
-                    <label className="block mb-1 font-medium text-gray-700">Stock</label>
+                    <label className="block mb-1 font-medium text-gray-700">Quantité <span className='text-red-900'>*</span></label>
                     <input type="number" name="stock" value={newProduct.stock} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-4">
+                    <div className='flex'>
+                      <label className="block mb-1 font-medium text-gray-700 mr-2">Stock d'alert</label>
+                      <div class="relative">
+                        <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
+                          ?
+                        </span>
+                        <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
+                          Le stock d'alert est la quantité à partir de laquelle l'application fera un rappel de réapprovisionnement
+                        </div>
+                      </div>
+                    </div>
+                    <input type="number" name="alert" value={newProduct.alert} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-6">
                     <label className="block mb-1 font-medium text-gray-700">Image</label>
@@ -959,24 +987,48 @@ export default function App() {
                 <h3 className="text-xl font-semibold mb-3">Modifier le produit</h3>
                 <form onSubmit={submitEditProduct} className="mb-4 border p-6 rounded-xl max-w-md bg-white shadow">
                   <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">Nom</label>
+                    <label className="block mb-1 font-medium text-gray-700">Nom <span className='text-red-900'>*</span></label>
                     <input type="text" name="name" value={editedProduct.name} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">SKU</label>
+                    <div className='flex'>
+                      <label className="block mb-1 font-medium text-gray-700 mr-2">SKU</label>
+                      <div class="relative">
+                        <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
+                          ?
+                        </span>
+                        <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
+                          SKU est le numéro d'identifiant unique que vous attribuez à un produit dans le stock pour faciliter son identification.
+                        </div>
+                      </div>
+                    </div>
                     <input type="text" name="sku" value={editedProduct.sku} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">Prix (FCFA)</label>
+                    <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
                     <input type="number" name="price" step="0.01" value={editedProduct.price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">Prix d'achat (FCFA)</label>
+                    <label className="block mb-1 font-medium text-gray-700">Prix d'achat (FCFA) <span className='text-red-900'>*</span></label>
                     <input type="number" name="buy_price" step="0.01" value={editedProduct.buy_price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">Stock</label>
+                    <label className="block mb-1 font-medium text-gray-700">Quantité <span className='text-red-900'>*</span></label>
                     <input type="number" name="stock" value={editedProduct.stock} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div className="mb-2">
+                    <div className='flex'>
+                      <label className="block mb-1 font-medium text-gray-700 mr-2">Stock d'alert</label>
+                      <div class="relative">
+                        <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
+                          ?
+                        </span>
+                        <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
+                          Le stock d'alert est la quantité à partir de laquelle l'application fera un rappel de réapprovisionnement
+                        </div>
+                      </div>
+                    </div>
+                    <input type="number" name="alert" value={editedProduct.alert} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                   </div>
                   <div className="mb-4">
                     <label className="block mb-1 font-medium text-gray-700">Image (optionnelle)</label>
@@ -995,59 +1047,81 @@ export default function App() {
             </div>
             
           )}
-          <ul>
-            {filteredProducts.map((p) => (
-              <li
-                key={p.id}
-                className={`mb-4 border rounded-xl p-4 flex items-center gap-6 shadow-lg transition-colors duration-300
-                  ${
-                    p.stock === 0
-                      ? 'bg-red-100 dark:bg-red-900 border-red-500 dark:border-red-700'
-                      : p.stock <= 2
-                      ? 'bg-yellow-100 dark:bg-yellow-900 border-yellow-400 dark:border-yellow-600'
-                      : darkMode ? "border-slate-600 bg-slate-800" : "bg-white border-gray-300"
-                  }`}
+          <table className={`min-w-full border border-gray-300 rounded-lg overflow-scroll ${darkMode ? 'text-white border-gray-700':''}`}>
+            <thead className={`${darkMode ? 'bg-gray-800' :'bg-gray-100'}`}>
+              <th
+                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}
               >
-                {p.imageUrl ? (
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    className="w-20 h-20 object-contain rounded-lg"
-                  />
-                ) : (
-                  <div className="w-20 h-20 bg-gray-100 dark:bg-slate-700 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-300">
-                    Pas d’image
-                  </div>
-                )}
+                Image
+              </th>
+              <th 
+                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
+                  Nom
+              </th>
+              <th 
+                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
+                  SKU
+              </th>
+              <th 
+                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
+                  Prix d'achat
+              </th>
+              <th 
+                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
+                  Prix de vente
+              </th>
+              <th 
+                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
+                  Quantité
+              </th>
+              <th 
+                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
+                  Qty Alert
+              </th>
+              <th 
+                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}
+              >
+                Actions
+              </th>
+            </thead>
+            <tbody>
+              {filteredProducts.map((p) => (
+                <tr
+                  className={`hover:bg-gray-500 transition-colors ${
+                    darkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"
+                  } ${
+                    p.stock === 0
+                      ? "bg-red-900 text-white hover:bg-red-800"
+                      : p.stock <= p.alert
+                      ? "bg-yellow-100 text-black hover:bg-yellow-900"
+                      : ""
+                  }`}
+                >
+                  <td className={`px-6 py-4 text-sm border-b ${darkMode ? "border-gray-700" : "border-gray-300"}`}>
+                    <img src={p.imageUrl} width={40} height={40} className="rounded" />
+                  </td>
 
-                <div className="flex-1">
-                  <h3 className={`text-lg font-semibold ${darkMode ? "text-white" : "text-gray-900"}`}>
-                    {p.name}
-                  </h3>
-                  <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>SKU: {p.sku}</p>
-                  <p className={`font-bold ${darkMode ? "text-indigo-400" : "text-indigo-600"}`}>FCFA{p.price}</p>
-                  <p className={`${darkMode ? "text-gray-300" : "text-gray-600"}`}>Stock: {p.stock}</p>
-                </div>
+                  <td className="px-6 py-4 text-sm font-bold border-b">{p.name}</td>
+                  <td className="px-6 py-4 text-sm border-b">{p.sku}</td>
+                  <td className="px-6 py-4 text-sm border-b">{p.price}</td>
+                  <td className="px-6 py-4 text-sm border-b">{p.buy_price}</td>
+                  <td className="px-6 py-4 text-sm border-b">{p.stock}</td>
+                  <td className="px-6 py-4 text-sm border-b">{p.alert}</td>
 
-                {user.role === 'admin' && (
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => handleEditProduct(p)}
-                      className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300 font-semibold"
-                    >
-                      <FaEdit />
+                  <td className={`px-6 py-4 text-sm border-b`}>
+                    <button className="px-3 py-3 bg-blue-500 rounded hover:bg-blue-600 mr-5" onClick={() => handleEditProduct(p)}>
+                      <FaEdit className="text-white" />
                     </button>
-                    <button
-                      onClick={() => handleDeleteProduct(p.id)}
-                      className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-semibold"
-                    >
-                      <FaTrash />
+                    <button className="px-3 py-3 bg-red-500 rounded hover:bg-red-600">
+                      <FaTrash className="text-white" />
                     </button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
+                  </td>
+                </tr>
+
+
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
