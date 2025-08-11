@@ -77,7 +77,7 @@ export default function App() {
   const [settingsMe, setSettingsMe] = useState({name: "", surname: "", username: "", phone: "", email: "", entreprise: "", adresse: "", logo: null, role:''})
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', buy_price: '', stock: 0, alert: 5, image: null});
+  const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', buy_price: '', stock: 0, alert: 5, image: null, category: ''});
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editProduct, setEditProduct] = useState(null);
@@ -884,6 +884,13 @@ export default function App() {
               <option value="low">🟡 Stock faible (1–2)</option>
               <option value="ok">⚪ Stock suffisant</option>
             </select>
+            
+            <div>
+              <label htmlFor="category">Catégories:</label>
+              <select name="category" id="category">
+              
+              </select>
+            </div>
 
             <div className="flex gap-3 text-sm font-medium">
               <span className="flex items-center gap-1 text-red-700">
@@ -931,6 +938,9 @@ export default function App() {
                       </div>
                     </div>
                     <input type="text" name="sku" value={newProduct.sku} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                  </div>
+                  <div>
+                    
                   </div>
                   <div className="mb-4">
                     <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
@@ -1112,7 +1122,7 @@ export default function App() {
                     <button className="px-3 py-3 bg-blue-500 rounded hover:bg-blue-600 mr-5" onClick={() => handleEditProduct(p)}>
                       <FaEdit className="text-white" />
                     </button>
-                    <button className="px-3 py-3 bg-red-500 rounded hover:bg-red-600">
+                    <button className="px-3 py-3 bg-red-500 rounded hover:bg-red-600" onClick={() => handleDeleteProduct(p.id)}>
                       <FaTrash className="text-white" />
                     </button>
                   </td>
