@@ -57,3 +57,39 @@ function ProductPresent () {
 }
 
 export default ProductPresent();
+
+<div className="hidden sm:flex flex-wrap flex-row gap-3 justify-center mb-6">
+    <button onClick={() => setView('pos')} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'pos' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
+        <FaShoppingCart /> Caisse
+    </button>
+    <button onClick={() => { setView('admin'); loadProducts(); }} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'admin' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
+        <FaBox /> Stock
+    </button>
+    <button onClick={() => { setView('sales'); loadSales(); }} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'sales' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
+        <FaCreditCard /> Ventes
+    </button>
+    {user.role === 'admin' && 
+        <button
+        onClick={() => {
+            setView('charts');
+            loadSales();
+        }}
+        className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'charts' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}
+        >
+        <FaChartBar /> Graphiques
+        </button>
+    }
+    {user.role === 'admin' && 
+        <button 
+        onClick={() => setView('analyse')}
+        disabled={loadingAI}
+        className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'analyse' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
+        {loadingAI ? "Analyse en cours..." : `🔮 Analyse IA (${user.tokens_conseil})`}
+        </button>
+    }
+</div>
+
+<h3 className="text-lg font-semibold">Menu</h3>
+<button onClick={closeDrawer} className="text-gray-500 hover:text-black dark:hover:text-white">
+✕
+</button>

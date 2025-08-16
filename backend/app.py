@@ -437,6 +437,7 @@ def get_current_user():
         'entreprise': user.entreprise,
         'phone': user.phone,
         'email': user.email,
+        'adresse': user.adresse,
         'logo': user.logo,
         'role': user.role,
         'tokens_conseil': user.tokens_conseil,

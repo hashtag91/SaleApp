@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
 
 .cl-checkbox {
  position: relative;
@@ -137,4 +138,12 @@
 .cl-checkbox > input:indeterminate:disabled + span::before {
  border-color: transparent;
  background-color: currentColor;
+}
+
+html, body {
+  @apply h-full;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
 }

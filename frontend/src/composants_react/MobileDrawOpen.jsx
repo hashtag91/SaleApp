@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import {
-  FaShoppingCart, FaBox, FaCreditCard, FaChartBar,
-  FaCog, FaUserCircle
+  FaShoppingCart, FaCog, FaLocationArrow, FaHome, FaTag, FaChevronRight, FaMoneyBill, FaChartArea, FaRobot
 } from 'react-icons/fa'
 
 export default function MobileDrawOpen({
   setMobileDrawerOpen, setView, loadProducts, loadSales,
   loadingAI, setShowSettings, settingsRetrieve, handleLogout,
-  user, darkMode
+  user, darkMode, view
 }) {
   const [animate, setAnimate] = useState(false)
+  const [openMenu, setOpenMenu] = useState(null);
+
+  const toggleMenu = (menu) => {
+    setOpenMenu(openMenu === menu ? null : menu);
+  };
 
   useEffect(() => {
     // Démarre l’animation d’ouverture après le montage
@@ -38,51 +42,165 @@ export default function MobileDrawOpen({
         ${darkMode ? 'bg-slate-900 text-white' : 'bg-white text-black'}
         shadow-lg
       `}>
-        <div className="p-4 border-b flex justify-between items-center border-gray-200 dark:border-slate-700">
-          <h3 className="text-lg font-semibold">Menu</h3>
-          <button onClick={closeDrawer} className="text-gray-500 hover:text-black dark:hover:text-white">
-            ✕
-          </button>
-        </div>
+        <div className="p-4 border-b flex flex-col justify-top h-full items-left">
+          <div className='flex justify-center items-center mb-3 gap-3'>
+            <img
+              src={`/static/uploads/logo/${user.logo}`}
+              alt="logo"
+              className="w-[45px] max-h-[45px] rounded"
+            />
+            <div>
+              <h3 className={`font-bold text-sm text-black ${darkMode ? 'text-white' : ''}`}>{user?.entreprise}</h3>
+              <p className="text-xs text-gray-500 flex gap-1">
+                <FaLocationArrow />
+                {user?.adresse}
+              </p>
+            </div>
+          </div>
+          <div
+            className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+              view === 'dashboard' ? 'bg-gray-200 text-gray-700' : ''
+            } ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}
+            onClick={() => { setView('dashboard'); closeDrawer() }}
+          >
+            <FaHome />
+            <button >Tableau de bord</button>
+          </div>
+          <div
+            className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+              view === 'pos' ? 'bg-gray-200 text-gray-700' : ''
+            } ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}
+            onClick={() => { setView('pos'); closeDrawer() }}
+          >
+            <FaShoppingCart />
+            <button >Caisse</button>
+          </div>
+          <div className={`flex flex-col gap-1 ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}>
+            <div
+              className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${openMenu === 'stock' ? 'text-gray-700' : ''}`}
+              onClick={() => toggleMenu('stock')}
+            >
+              <FaTag />
+              <span className="flex-1">Stock</span>
+              <FaChevronRight
+                className={`text-sm transition-transform ${
+                  openMenu === 'stock' ? 'rotate-90' : ''
+                }`}
+              />
+            </div>
 
-        <div className="flex flex-col p-4 gap-3">
-          <button onClick={() => { setView('pos'); closeDrawer() }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-            <FaShoppingCart className="inline-block mr-1" /> Caisse
-          </button>
-          <button onClick={() => { setView('admin'); loadProducts(); closeDrawer() }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-            <FaBox className="inline-block mr-1" /> Produits
-          </button>
-          <button onClick={() => { setView('sales'); loadSales(); closeDrawer() }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-            <FaCreditCard className="inline-block mr-1" /> Ventes
-          </button>
+            <ul
+              className={`overflow-hidden transition-all duration-300 max-h-0 opacity-0 pointer-events-none ${
+                openMenu === 'stock'
+                  ? 'max-h-40 opacity-100 pointer-events-auto'
+                  : ''
+              }`}
+            >
+              <li
+                className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer ${
+                  view === 'admin' ? 'bg-gray-200 text-gray-700' : ''
+                }`}
+                onClick={() => { setView('admin'); loadProducts(); closeDrawer() }}
+              >
+                Produits
+              </li>
+              <li
+                className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer ${
+                  view === 'category' ? 'bg-gray-200 text-gray-700' : ''
+                }`}
+                onClick={() => setView('category')}
+              >
+                Catégorie
+              </li>
+            </ul>
+          </div>
+          <div
+            className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+              view === 'sales' ? 'bg-gray-200 text-gray-700' : ''
+            } ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}
+            onClick={() => { setView('sales'); loadSales(); closeDrawer() }}
+          >
+            <FaMoneyBill />
+            <button >Ventes</button>
+          </div>
           {user.role === 'admin' && (
-            <button onClick={() => { setView('charts'); loadSales(); closeDrawer() }} className="bg-indigo-600 text-white px-4 py-2 rounded">
-              <FaChartBar className="inline-block mr-1" /> Graphiques
-            </button>
+            <div
+              className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                view === 'charts' ? 'bg-gray-200 text-gray-700' : ''
+              } ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}
+              onClick={() => { setView('charts'); loadSales(); closeDrawer() }}
+            >
+              <FaChartArea />
+              <button >statistique</button>
+            </div>
           )}
           {user.role === 'admin' && (
-            <button
+            <div
+              className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                view === 'analyse' ? 'bg-gray-200 text-gray-700' : ''
+              } ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}
               onClick={() => { setView('analyse'); closeDrawer() }}
               disabled={loadingAI}
-              className="bg-purple-600 text-white px-4 py-2 rounded"
             >
-              {loadingAI ? "Analyse en cours..." : "🔮 Analyse IA"}
-            </button>
+              <FaRobot />
+              <button >
+                {loadingAI ? "Analyse en cours..." : "Conseil IA"}
+              </button>
+            </div>
           )}
-          <button
-            onClick={() => { setView('settings'); closeDrawer(); setShowSettings(true); settingsRetrieve(); }}
-            className='bg-gray-600 text-white px-4 py-2 rounded'>
-            <FaCog className='inline-block mr-1' /> Paramètres
-          </button>
+
+          <div className={`flex flex-col gap-1 ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}>
+            <div
+                className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${openMenu === 'setting' ? 'text-gray-700' : ''}`}
+                onClick={() => toggleMenu('setting')}
+            >
+                <FaCog />
+                <span className="flex-1">Pametres</span>
+                <FaChevronRight
+                className={`text-sm transition-transform ${
+                    openMenu === 'setting' ? 'rotate-90' : ''
+                }`}
+                />
+            </div>
+    
+            <ul
+                className={`overflow-hidden transition-all duration-300 max-h-0 opacity-0 pointer-events-none ${
+                openMenu === 'setting'
+                    ? 'max-h-40 opacity-100 pointer-events-auto'
+                    : ''
+                }`}
+            >
+                <li
+                className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer ${
+                    view === 'profil' ? 'bg-gray-200 text-gray-700' : ''
+                }`}
+                onClick={() => { setView('profil'); closeDrawer(); setShowSettings(true); settingsRetrieve(); }}
+                >
+                Profil
+                </li>
+                {user.role === 'admin' &&
+                    <li
+                    className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer ${
+                        view === 'employe' ? 'bg-gray-200 text-gray-700' : ''
+                    }`}
+                    onClick={() => {setView('employees'); closeDrawer(); setShowSettings(true); settingsRetrieve();}}
+                    >
+                    Employés
+                    </li>
+                }
+                <li
+                className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer ${
+                    view === 'about' ? 'bg-gray-200 text-gray-700' : ''
+                }`}
+                onClick={() => setView('about')}
+                >
+                A propos
+                </li>
+            </ul>
+          </div>
           <button onClick={handleLogout} className='bg-red-600 text-white px-4 py-2 rounded'>
             Déconnexion
           </button>
-        </div>
-
-        {/* Footer user */}
-        <div className='flex items-center justify-center p-4 text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-slate-700'>
-          <FaUserCircle className="mr-2" />
-          {user?.name} {user?.surname}
         </div>
       </div>
     </div>

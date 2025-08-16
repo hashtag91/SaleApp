@@ -43,6 +43,8 @@ import Switcher from './composants_react/Switcher'
 import ReactMarkdown from 'react-markdown';
 import SubUserEditForm from './composants_react/SubUserEditForm';
 import AboutPage from './composants_react/About';
+import MenuLateral from './composants_react/MenuLateral';
+import SelectedProduct from './composants_react/SelectedProduct';
 
 export default function App() {
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
@@ -66,7 +68,7 @@ export default function App() {
   const isValidPassword = (password) => password.length >= 6;
 
   const [employeesFormData, setEmployeesFormData] = useState({name: "", surname: "", username: "", password:"", phone: "", email: "", adresse: "", role:'autres'})
-
+  const [openMenu, setOpenMenu] = useState(true);
   const [view, setView] = useState('pos');
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
@@ -463,6 +465,7 @@ export default function App() {
       setEditProduct(null);
       loadProducts();
       toast.success(updatedProduct.message || "Produit modifié avec succès !");
+      setView('admin')
     } catch (error) {
       toast.error(error.message);
     }
@@ -691,15 +694,22 @@ export default function App() {
   }
 
   return (
-    <div className={`${darkMode ? 'bg-slate-800' : 'bg-gray-50'} p-4 sm:p-4 bg-gray-50 min-h-screen mx-auto`}>
+    <div className={`${darkMode ? 'bg-slate-800' : 'bg-gray-50'} flex flex-col h-screen mx-auto `}>
       <div
-        className={`sticky top-0 p-4 w-full mb-3 flex justify-between items-center z-40 shadow rounded
-          ${darkMode ? 'bg-slate-700' : 'bg-white'}`}
+        className={`sticky top-0 p-4 w-full flex justify-between items-center z-40 shadow rounded h-16 ${darkMode ? 'bg-slate-700' : 'bg-white'}`}
       >
-        <h2 className={`text-2xl md:text-4xl font-bold 
-          ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-          {user?.entreprise}
-        </h2>
+        <div className='flex gap-2'>
+          <button
+            onClick={() => setOpenMenu(!openMenu)}
+            className='hidden sm:flex'
+          >
+            <FaBars className={`text-lg ${darkMode ? 'text-white':'text-gray-900'}`} />
+          </button>
+          <h2 className={`text-1xl md:text-1xl font-bold 
+            ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            Ika Jaago
+          </h2>
+        </div>
         <div className="flex items-center space-x-3">
           <Switcher darkMode={darkMode} setDarkMode={setDarkMode} className='sm:hidden'/>
 
@@ -735,859 +745,642 @@ export default function App() {
         </div>
       </div>
 
+      <div className='flex flex-1 overflow-hidden'>
+        <MenuLateral user={user} setView={setView} view={view} loadProducts={loadProducts} loadingAI={loadingAI} loadSales={loadSales} openMenu1={openMenu}/>
+        <div className='flex-1 overflow-y-auto py-2 px-3'>
+          {/* Le menu sur mobile */}
+          {/*  */}
+          {mobileDrawerOpen && (
+            <MobileDrawOpen setMobileDrawerOpen={setMobileDrawerOpen} setView={setView} loadProducts={loadProducts} loadSales={loadSales} loadingAI={loadingAI} setShowSettings={setShowSettings} settingsRetrieve={settingsRetrieve} handleLogout={handleLogout} user={user} darkMode={darkMode} view={view}/>
+          )}
 
-      {/* Le menu sur mobile */}
-      {/*  */}
-      {mobileDrawerOpen && (
-        <MobileDrawOpen setMobileDrawerOpen={setMobileDrawerOpen} setView={setView} loadProducts={loadProducts} loadSales={loadSales} loadingAI={loadingAI} setShowSettings={setShowSettings} settingsRetrieve={settingsRetrieve} handleLogout={handleLogout} user={user} darkMode={darkMode}/>
-      )}
-      <div className="hidden sm:flex flex-wrap flex-row gap-3 justify-center mb-6">
-        <button onClick={() => setView('pos')} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'pos' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
-          <FaShoppingCart /> Caisse
-        </button>
-        <button onClick={() => { setView('admin'); loadProducts(); }} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'admin' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
-          <FaBox /> Stock
-        </button>
-        <button onClick={() => { setView('sales'); loadSales(); }} className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'sales' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
-          <FaCreditCard /> Ventes
-        </button>
-        {user.role === 'admin' && 
-          <button
-            onClick={() => {
-              setView('charts');
-              loadSales();
-            }}
-            className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'charts' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}
-          >
-            <FaChartBar /> Graphiques
-          </button>
-        }
-        {user.role === 'admin' && 
-          <button 
-            onClick={() => setView('analyse')}
-            disabled={loadingAI}
-            className={`px-4 py-2 rounded-lg font-semibold transition ${view === 'analyse' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 hover:bg-indigo-100'}`}>
-            {loadingAI ? "Analyse en cours..." : `🔮 Analyse IA (${user.tokens_conseil})`}
-          </button>
-        }
-      </div>
-
-      {['pos', 'admin'].includes(view) && (
-        <div className="sticky mb-6 max-w-md mx-auto flex items-center gap-3 border border-gray-300 rounded px-3 py-2 bg-white">
-          <FaSearch className="text-gray-500" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Rechercher par nom ou SKU"
-            className='flex-1 focus:outline-none'
-          />
-        </div>
-      )}
-
-      {view === 'pos' && (
-        <div className="flex flex-col lg:flex-row gap-6 w-full">
-          <div className="flex-1">
-            <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Produits</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3">
-              {filteredProducts.map((p) => (
-                <button key={p.id} onClick={() => addToCart(p)} className="bg-blue-600 text-white rounded-xl shadow flex" style={{ minHeight: '120px' }}>
-                  {p.imageUrl && (
-                    <div className="w-1/2 p-1 flex items-center justify-center bg-white rounded-l-xl">
-                      <img src={p.imageUrl} alt={p.name} className="max-w-full max-h-full object-contain rounded" />
-                    </div>
-                  )}
-                  <div className="w-1/2 p-3 flex flex-col justify-center space-y-1 text-left">
-                    <span className="font-semibold text-lg truncate">{p.name}</span>
-                    <span className="text-sm text-gray-100">SKU: {p.sku}</span>
-                    <span>FCFA{p.price.toFixed(2)}</span>
-                    <span className="text-sm text-gray-200">Stock: {p.stock}</span>
-                    <div className="mt-auto text-right">
-                      <FaShoppingCart className="inline-block text-white" />
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="hidden sm:block" style={{ width: '30vw', minWidth: '280px' }}>
-            <h2 className={`text-xl font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : ''}`}>
-              <FaShoppingCart /> Panier
-            </h2>
-            <ul>
-              {cart.map((p) => (
-                <li key={p.id} className="mb-3 flex justify-between items-center">
-                  <div className="flex-1">
-                    <div className={`font-semibold ${darkMode ? 'text-white' :''}`}>{p.name}</div>
-                    <div className="text-sm text-gray-600">
-                      <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">−</button>
-                      <span className={`mx-2 ${darkMode ? 'text-white/70' : ''}`}>{p.qty}</span>
-                      <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+</button>
-                      <span className={`ml-4 ${darkMode ? 'text-white/70' : ''}`}>= FCFA {(p.qty * p.price).toFixed(2)}</span>
-                    </div>
-                  </div>
-                  <button onClick={() => removeFromCart(p.id)} className="text-red-600 hover:text-red-800 ml-2" title="Supprimer du panier">
-                    <FaTrash />
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <hr className="my-3" />
-            <div className={`text-lg font-bold ${darkMode ? 'text-white/70' : ''}`}>Total : FCFA{total.toFixed(2)}</div>
-            <div className="flex items-center gap-2 mt-4 flex-1">
+          {['pos', 'admin'].includes(view) && (
+            <div className="sticky mb-6 max-w-md mx-auto flex items-center gap-3 border border-gray-300 rounded px-3 py-2 bg-white">
+              <FaSearch className="text-gray-500" />
               <input
-                type="checkbox"
-                id="generateInvoice"
-                checked={generateInvoice}
-                onChange={(e) => setGenerateInvoice(e.target.checked)}
-                className="h-4 w-4"
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Rechercher par nom ou SKU"
+                className='flex-1 focus:outline-none'
               />
-              <label htmlFor="generateInvoice" className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-700'}`} >
-                Générer une facture PDF
-              </label>
-              {generateInvoice && (
-                <input
-                  type="text"
-                  placeholder="Nom du client"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                />
-              )}
             </div>
+          )}
 
-            <button onClick={checkout} className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2">
-              <FaCheck /> Valider la vente
-            </button>
-          </div>
-        </div>
-      )}
+          {view === 'pos' && (
+            <div className="flex flex-col lg:flex-row gap-6 w-full px-5">
+              <div className="flex-1">
+                <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Produits</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {filteredProducts.map((p) => (
+                    p.stock >= 0 && (
+                      <button key={p.id} onClick={() => addToCart(p)} className={`text-white rounded-xl shadow-lg flex flex-col ${darkMode ? 'bg-slate-400':''}`} style={{ minHeight: '120px' }}>
+                        {p.imageUrl && (
+                          <div className="p-1 flex items-center justify-center bg-white rounded-xl w-full h-full">
+                            <img src={p.imageUrl} alt={p.name} className="max-w-[70%] max-h-full object-contain rounded" />
+                          </div>
+                        )}
+                        <div className="w-full p-3 flex flex-col justify-center space-y-1 text-left">
+                          <span className={`font-semibold text-gray-700 truncate ${darkMode ? 'text-white':''}`}>{p.name}</span>
+                          <span className={`text-xs text-gray-500 ${darkMode ? 'text-white':''}`}>SKU: {p.sku}</span>
+                          <div className='flex justify-between'>
+                            <span className={`text-sm text-gray-500 ${darkMode ? 'text-white':''}`}>Stock: <span className='font-bold'>{p.stock}</span></span>
+                            <span className={`font-bold text-sm text-gray-700 ${darkMode ? 'text-white' : ''}`}>FCFA {p.price.toFixed(0)}</span>
+                          </div>
+                          
+                        </div>
+                      </button>
+                    )
+                  ))}
+                </div>
+              </div>
 
-      {view === 'admin' && (
-        <div>
-          <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Stock</h2>
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-            {user.role === 'admin' &&
-              <button onClick={() => setShowAddProduct(true)} className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
-                Ajouter un produit
-              </button>
-            }
-            <select
-              value={stockFilter}
-              onChange={e => setStockFilter(e.target.value)}
-              className="border border-gray-300 px-3 py-2 rounded text-sm"
-            >
-              <option value="all">📦 Tous les produits</option>
-              <option value="rupture">🔴 Rupture de stock</option>
-              <option value="low">🟡 Stock faible (1–2)</option>
-              <option value="ok">⚪ Stock suffisant</option>
-            </select>
-            
-            <div>
-              <label htmlFor="category">Catégories:</label>
-              <select name="category" id="category">
-              
-              </select>
-            </div>
+              <div className="hidden sm:block" style={{ width: '25vw', minWidth: '280px' }}>
+                <h2 className={`text-xl font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : ''}`}>
+                  <FaShoppingCart /> Panier
+                </h2>
+                <ul>
+                  {cart.map((p) => (
+                    <li key={p.id} className="mb-3 flex justify-between items-center">
+                      <div className="flex-1">
+                        <div className={`font-semibold ${darkMode ? 'text-white' :''}`}>{p.name}</div>
+                        <div className="text-sm text-gray-600">
+                          <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">−</button>
+                          <span className={`mx-2 ${darkMode ? 'text-white/70' : ''}`}>{p.qty}</span>
+                          <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+</button>
+                          <span className={`ml-4 ${darkMode ? 'text-white/70' : ''}`}>= FCFA {(p.qty * p.price).toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => removeFromCart(p.id)} className="text-red-600 hover:text-red-800 ml-2" title="Supprimer du panier">
+                        <FaTrash />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <hr className="my-3" />
+                <div className={`text-lg font-bold ${darkMode ? 'text-white/70' : ''}`}>Total : FCFA{total.toFixed(2)}</div>
+                <div className="flex items-center gap-2 mt-4 flex-1">
+                  <input
+                    type="checkbox"
+                    id="generateInvoice"
+                    checked={generateInvoice}
+                    onChange={(e) => setGenerateInvoice(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <label htmlFor="generateInvoice" className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-700'}`} >
+                    Générer une facture PDF
+                  </label>
+                  {generateInvoice && (
+                    <input
+                      type="text"
+                      placeholder="Nom du client"
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                      className="w-full border px-3 py-2 rounded"
+                      required
+                    />
+                  )}
+                </div>
 
-            <div className="flex gap-3 text-sm font-medium">
-              <span className="flex items-center gap-1 text-red-700">
-                <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
-                Rupture ({ruptureStock})
-              </span>
-              <span className="flex items-center gap-1 text-yellow-700">
-                <span className="w-3 h-3 rounded-full bg-yellow-400 inline-block"></span>
-                Faible ({stockFaible})
-              </span>
-              <span className={`flex items-center gap-1 text-gray-700 ${darkMode ? 'text-white' : ''}`}>
-                <span className="w-3 h-3 rounded-full bg-gray-300 inline-block"></span>
-                OK ({stockOk})
-              </span>
-            </div>
-          </div>
-
-          {showAddProduct && (
-            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-              <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative overflow-y-auto max-h-full">
-                <button
-                  onClick={() => setShowAddProduct(false)}
-                  className="absolute top-2 right-2 text-gray-500 hover:text-black"
-                >
-                  ✕
+                <button onClick={checkout} className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2">
+                  <FaCheck /> Valider la vente
                 </button>
-
-                <h3 className="text-xl font-semibold mb-4">Ajouter un produit</h3>
-
-                <form onSubmit={submitNewProduct} className="w-full border p-4 sm:p-6 rounded-xl bg-white shadow">
-                  <div className="mb-4">
-                    <label className="block mb-1 font-medium text-gray-700">Nom <span className='text-red-900'>*</span></label>
-                    <input type="text" name="name" value={newProduct.name} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-4">
-                    <div className='flex'>
-                      <label className="block mb-1 font-medium text-gray-700 mr-2">SKU</label>
-                      <div class="relative">
-                        <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
-                          ?
-                        </span>
-                        <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
-                          SKU est le numéro d'identifiant unique que vous attribuez à un produit dans le stock pour faciliter son identification.
-                        </div>
-                      </div>
-                    </div>
-                    <input type="text" name="sku" value={newProduct.sku} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div>
-                    
-                  </div>
-                  <div className="mb-4">
-                    <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
-                    <input type="number" name="price" step="0.01" value={newProduct.price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="" className="bloc mb-1 font-medium text-gray-700">Prix d'achat (FCFA) <span className='text-red-900'>*</span></label>
-                    <input type="number" name="buy_price" value={newProduct.buy_price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2" required/>
-                  </div>
-                  <div className="mb-4">
-                    <label className="block mb-1 font-medium text-gray-700">Quantité <span className='text-red-900'>*</span></label>
-                    <input type="number" name="stock" value={newProduct.stock} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-4">
-                    <div className='flex'>
-                      <label className="block mb-1 font-medium text-gray-700 mr-2">Stock d'alert</label>
-                      <div class="relative">
-                        <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
-                          ?
-                        </span>
-                        <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
-                          Le stock d'alert est la quantité à partir de laquelle l'application fera un rappel de réapprovisionnement
-                        </div>
-                      </div>
-                    </div>
-                    <input type="number" name="alert" value={newProduct.alert} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-6">
-                    <label className="block mb-1 font-medium text-gray-700">Image</label>
-                    <input type="file" name="image" accept="image/*" onChange={handleProductChange} className="w-full" />
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="submit" className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition">
-                      Ajouter le produit
-                    </button>
-                    <button type="button" onClick={() => setShowAddProduct(false)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
-                      Annuler
-                    </button>
-                  </div>
-                </form>
               </div>
             </div>
           )}
-          {editProduct && (
-            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-              <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative">
-                <button
-                  onClick={() => setEditProduct(null)}
-                  className="absolute top-2 right-2 text-gray-500 hover:text-black"
-                >
-                  ✕
-                </button>
 
-                <h3 className="text-xl font-semibold mb-3">Modifier le produit</h3>
-                <form onSubmit={submitEditProduct} className="mb-4 border p-6 rounded-xl max-w-md bg-white shadow">
-                  <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">Nom <span className='text-red-900'>*</span></label>
-                    <input type="text" name="name" value={editedProduct.name} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-2">
-                    <div className='flex'>
-                      <label className="block mb-1 font-medium text-gray-700 mr-2">SKU</label>
-                      <div class="relative">
-                        <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
-                          ?
-                        </span>
-                        <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
-                          SKU est le numéro d'identifiant unique que vous attribuez à un produit dans le stock pour faciliter son identification.
-                        </div>
-                      </div>
-                    </div>
-                    <input type="text" name="sku" value={editedProduct.sku} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
-                    <input type="number" name="price" step="0.01" value={editedProduct.price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">Prix d'achat (FCFA) <span className='text-red-900'>*</span></label>
-                    <input type="number" name="buy_price" step="0.01" value={editedProduct.buy_price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-2">
-                    <label className="block mb-1 font-medium text-gray-700">Quantité <span className='text-red-900'>*</span></label>
-                    <input type="number" name="stock" value={editedProduct.stock} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-2">
-                    <div className='flex'>
-                      <label className="block mb-1 font-medium text-gray-700 mr-2">Stock d'alert</label>
-                      <div class="relative">
-                        <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
-                          ?
-                        </span>
-                        <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
-                          Le stock d'alert est la quantité à partir de laquelle l'application fera un rappel de réapprovisionnement
-                        </div>
-                      </div>
-                    </div>
-                    <input type="number" name="alert" value={editedProduct.alert} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block mb-1 font-medium text-gray-700">Image (optionnelle)</label>
-                    <input type="file" name="image" accept="image/*" onChange={handleEditChange} className="w-full" />
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="submit" className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 transition">
-                      Enregistrer les modifications
-                    </button>
-                    <button type="button" onClick={() => setEditProduct(null)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
-                      Annuler
-                    </button>
-                  </div>
-                </form>
+          {view === 'admin' && (
+            <div className='p-4'>
+              <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Stock</h2>
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                {user.role === 'admin' &&
+                  <button onClick={() => setShowAddProduct(true)} className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
+                    Ajouter un produit
+                  </button>
+                }
+                <select
+                  value={stockFilter}
+                  onChange={e => setStockFilter(e.target.value)}
+                  className="border border-gray-300 px-3 py-2 rounded text-sm"
+                >
+                  <option value="all">📦 Tous les produits</option>
+                  <option value="rupture">🔴 Rupture de stock</option>
+                  <option value="low">🟡 Stock faible (1–2)</option>
+                  <option value="ok">⚪ Stock suffisant</option>
+                </select>
+
+                <div className="flex gap-3 text-sm font-medium">
+                  <span className="flex items-center gap-1 text-red-700">
+                    <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
+                    Rupture ({ruptureStock})
+                  </span>
+                  <span className="flex items-center gap-1 text-yellow-700">
+                    <span className="w-3 h-3 rounded-full bg-yellow-400 inline-block"></span>
+                    Faible ({stockFaible})
+                  </span>
+                  <span className={`flex items-center gap-1 text-gray-700 ${darkMode ? 'text-white' : ''}`}>
+                    <span className="w-3 h-3 rounded-full bg-gray-300 inline-block"></span>
+                    OK ({stockOk})
+                  </span>
+                </div>
               </div>
-            </div>
-            
-          )}
-          <table className={`min-w-full border border-gray-300 rounded-lg overflow-scroll ${darkMode ? 'text-white border-gray-700':''}`}>
-            <thead className={`${darkMode ? 'bg-gray-800' :'bg-gray-100'}`}>
-              <th
-                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}
-              >
-                Image
-              </th>
-              <th 
-                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
-                  Nom
-              </th>
-              <th 
-                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
-                  SKU
-              </th>
-              <th 
-                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
-                  Prix d'achat
-              </th>
-              <th 
-                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
-                  Prix de vente
-              </th>
-              <th 
-                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
-                  Quantité
-              </th>
-              <th 
-                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}>
-                  Qty Alert
-              </th>
-              <th 
-                className={`${darkMode ? 'px-6 py-3 text-left text-gray-200 uppercase border-b border-gray-300 border-gray-700' : 'px-6 py-3 text-left text-gray-700 uppercase border-b border-gray-300 border-gray-700'}`}
-              >
-                Actions
-              </th>
-            </thead>
-            <tbody>
-              {filteredProducts.map((p) => (
-                <tr
-                  className={`hover:bg-gray-500 transition-colors ${
-                    darkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"
-                  } ${
-                    p.stock === 0
-                      ? "bg-red-900 text-white hover:bg-red-800"
-                      : p.stock <= p.alert
-                      ? "bg-yellow-100 text-black hover:bg-yellow-900"
-                      : ""
-                  }`}
-                >
-                  <td className={`px-6 py-4 text-sm border-b ${darkMode ? "border-gray-700" : "border-gray-300"}`}>
-                    <img src={p.imageUrl} width={40} height={40} className="rounded" />
-                  </td>
 
-                  <td className="px-6 py-4 text-sm font-bold border-b">{p.name}</td>
-                  <td className="px-6 py-4 text-sm border-b">{p.sku}</td>
-                  <td className="px-6 py-4 text-sm border-b">{p.price}</td>
-                  <td className="px-6 py-4 text-sm border-b">{p.buy_price}</td>
-                  <td className="px-6 py-4 text-sm border-b">{p.stock}</td>
-                  <td className="px-6 py-4 text-sm border-b">{p.alert}</td>
-
-                  <td className={`px-6 py-4 text-sm border-b`}>
-                    <button className="px-3 py-3 bg-blue-500 rounded hover:bg-blue-600 mr-5" onClick={() => handleEditProduct(p)}>
-                      <FaEdit className="text-white" />
-                    </button>
-                    <button className="px-3 py-3 bg-red-500 rounded hover:bg-red-600" onClick={() => handleDeleteProduct(p.id)}>
-                      <FaTrash className="text-white" />
-                    </button>
-                  </td>
-                </tr>
-
-
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {view === 'sales' && (
-        <div className="p-4">
-          <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>🧾 Historique des ventes</h2>
-
-          {/* Filtres et export */}
-          <div className="flex flex-wrap gap-3 mb-6">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <button
-              onClick={downloadCSV}
-              className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
-            >
-              📥 Exporter CSV
-            </button>
-          </div>
-
-          {/* Liste des ventes */}
-          <div className="max-h-[600px] overflow-auto space-y-6">
-            {sales.map((s) => {
-              // Si s.items est un JSON stringifié
-              let items = [];
-              try {
-                items = typeof s.items === 'string' ? JSON.parse(s.items) : s.items;
-              } catch (e) {
-                console.error('Erreur parsing items:', e);
-                items = [];
-              }
-
-              return (
-                <div
-                  key={s.id}
-                  className={`rounded-xl p-5 shadow-sm hover:shadow-md transition ${
-                    darkMode
-                      ? 'border border-slate-700 bg-slate-800 text-gray-100'
-                      : 'border border-gray-200 bg-white text-gray-800'
-                  }`}
-                >
-                  {/* En-tête vente */}
-                  <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-2">
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        🧾 Vente #{s.id}
-                      </h3>
-                      <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {new Date(s.date).toLocaleString()}
-                      </p>
-                      <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Vendeur: <span className={`${darkMode ? 'text-white' : 'text-black'} font-semibold`}>{s.seller}</span>
-                      </p>
-                    </div>
-                    <div className="text-left md:text-right">
-                      <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total</span>
-                      <div className={`text-xl font-bold ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
-                        FCFA {s.total.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tableau des articles */}
-                  <div className="overflow-x-auto w-full">
-                    <table
-                      className={`min-w-full text-sm border rounded-lg ${
-                        darkMode ? 'border-slate-700' : 'border-gray-300'
-                      }`}
+              {showAddProduct && (
+                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                  <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative overflow-y-auto max-h-full">
+                    <button
+                      onClick={() => setShowAddProduct(false)}
+                      className="absolute top-2 right-2 text-gray-500 hover:text-black"
                     >
-                      <thead className={`${darkMode ? 'bg-slate-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
-                        <tr>
-                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Produit</th>
-                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>SKU</th>
-                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Quantité</th>
-                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Prix unitaire</th>
-                          <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Sous-total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, idx) => (
-                          <tr key={idx} className={`${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
-                            <td className={`px-4 py-2 border ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.name}</td>
-                            <td className={`px-4 py-2 border ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.sku}</td>
-                            <td className={`px-4 py-2 border text-center ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.qty}</td>
-                            <td className={`px-4 py-2 border text-right ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>
-                              FCFA {Number(item.price).toFixed(2)}
-                            </td>
-                            <td className={`px-4 py-2 border text-right ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>
-                              FCFA {(item.price * item.qty).toFixed(2)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                      ✕
+                    </button>
+
+                    <h3 className="text-xl font-semibold mb-4">Ajouter un produit</h3>
+
+                    <form onSubmit={submitNewProduct} className="w-full border p-4 sm:p-6 rounded-xl bg-white shadow">
+                      <div className="mb-4">
+                        <label className="block mb-1 font-medium text-gray-700">Nom <span className='text-red-900'>*</span></label>
+                        <input type="text" name="name" value={newProduct.name} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                      </div>
+                      <div className="mb-4">
+                        <div className='flex'>
+                          <label className="block mb-1 font-medium text-gray-700 mr-2">SKU</label>
+                          <div class="relative">
+                            <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
+                              ?
+                            </span>
+                            <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
+                              SKU est le numéro d'identifiant unique que vous attribuez à un produit dans le stock pour faciliter son identification.
+                            </div>
+                          </div>
+                        </div>
+                        <input type="text" name="sku" value={newProduct.sku} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                      </div>
+                      <div>
+                        
+                      </div>
+                      <div className="mb-4">
+                        <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
+                        <input type="number" name="price" step="0.01" value={newProduct.price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                      </div>
+                      <div className="mb-4">
+                        <label htmlFor="" className="bloc mb-1 font-medium text-gray-700">Prix d'achat (FCFA) <span className='text-red-900'>*</span></label>
+                        <input type="number" name="buy_price" value={newProduct.buy_price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2" required/>
+                      </div>
+                      <div className="mb-4">
+                        <label className="block mb-1 font-medium text-gray-700">Quantité <span className='text-red-900'>*</span></label>
+                        <input type="number" name="stock" value={newProduct.stock} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                      </div>
+                      <div className="mb-4">
+                        <div className='flex'>
+                          <label className="block mb-1 font-medium text-gray-700 mr-2">Stock d'alert</label>
+                          <div class="relative">
+                            <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
+                              ?
+                            </span>
+                            <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
+                              Le stock d'alert est la quantité à partir de laquelle l'application fera un rappel de réapprovisionnement
+                            </div>
+                          </div>
+                        </div>
+                        <input type="number" name="alert" value={newProduct.alert} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                      </div>
+                      <div className="mb-6">
+                        <label className="block mb-1 font-medium text-gray-700">Image</label>
+                        <input type="file" name="image" accept="image/*" onChange={handleProductChange} className="w-full" />
+                      </div>
+                      <div className="flex gap-3">
+                        <button type="submit" className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition">
+                          Ajouter le produit
+                        </button>
+                        <button type="button" onClick={() => setShowAddProduct(false)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
+                          Annuler
+                        </button>
+                      </div>
+                    </form>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {view === 'charts' && (
-        <div>
-          <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-gray-800'}`}>📊 Statistiques des Ventes</h2>
-          <div className={`mx-auto rounded-xl shadow p-6 mb-2 ${darkMode ? 'bg-slate-900 shadow-lg border border-gray-100' : 'bg-white'}`}>
-            <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={comparisonData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis tickFormatter={(v) => `FCFA ${v}`} />
-                <Tooltip formatter={(v) => `FCFA ${v}`} />
-                <Legend />
-                <Bar dataKey="vente" fill="#4F46E5" name="Vente" />
-                <Bar dataKey="achat" fill="#F97316" name="Achat" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className={`max-w-3xl mx-auto rounded-xl shadow p-6 ${darkMode ? 'bg-slate-900 shadow-lg border border-gray-100' : 'bg-white'}`}>
-            <h3 className={`text-lg font-semibold mb-4 ${darkMode ? 'text-white' : ''}`}>Produits les plus vendus</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={productChartData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  fill="#8884d8"
-                  label
-                >
-                  {productChartData.map((_entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-      {view === 'settings' && (
-        <div className="flex-grow relative">
-          <h2 className={`text-center font-2xl font-bold mb-2 ${darkMode ? 'text-white' : ''}`}>Paramètres</h2>
-          <div className="flex flex-grow flex pb-20">
-            <div className="flex-grow flex justify-center items-center">
-              {settingsSelectedMenu === 'informations' && (
-                <form
-                  onSubmit={showPasswordChange ? handlePasswordReset : settingsSubmit}
-                  className={`p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1 transition-colors duration-300
-                    ${darkMode ? 'bg-slate-800 text-gray-100 border border-gray-100' : 'bg-white text-gray-800'}`}
-                >
-                  <h2 className="text-center font-bold">{showPasswordChange ? 'Changer le mot de passe' : 'Mes informations'}</h2>
-                  {!showPasswordChange && (
-                    <>
-                      {/* Nom */}
-                      <div>
-                        <label
-                          htmlFor="name"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Nom <span className='text-red-800'>*</span>
-                        </label>
-                        <input
-                          type="text"
-                          name="name"
-                          id="name"
-                          placeholder="Nom"
-                          required
-                          onChange={handleSettingsFieldChange}
-                          value={settingsMe.name}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                        />
-                      </div>
+              )}
+              {(editProduct && (view !== 'viewProduct')) && (
+                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                  <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative">
+                    <button
+                      onClick={() => setEditProduct(null)}
+                      className="absolute top-2 right-2 text-gray-500 hover:text-black"
+                    >
+                      ✕
+                    </button>
 
-                      {/* Prénom */}
-                      <div>
-                        <label
-                          htmlFor="surname"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Prénom <span className='text-red-800'>*</span>
-                        </label>
-                        <input
-                          type="text"
-                          name="surname"
-                          id="surname"
-                          placeholder="Prénom"
-                          required
-                          onChange={handleSettingsFieldChange}
-                          value={settingsMe.surname}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                        />
+                    <h3 className="text-xl font-semibold mb-3">Modifier le produit</h3>
+                    <form onSubmit={submitEditProduct} className="mb-4 border p-6 rounded-xl max-w-md bg-white shadow">
+                      <div className="mb-2">
+                        <label className="block mb-1 font-medium text-gray-700">Nom <span className='text-red-900'>*</span></label>
+                        <input type="text" name="name" value={editedProduct.name} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                       </div>
-
-                      {/* Entreprise */}
-                      <div>
-                        <label
-                          htmlFor="entreprise"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Entreprise
-                        </label>
-                        <input
-                          type="text"
-                          name="entreprise"
-                          id="entreprise"
-                          placeholder="Nom de l'entreprise"
-                          disabled={user.role !== 'admin'}
-                          onChange={handleSettingsFieldChange}
-                          value={settingsMe.entreprise}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                        />
+                      <div className="mb-2">
+                        <div className='flex'>
+                          <label className="block mb-1 font-medium text-gray-700 mr-2">SKU</label>
+                          <div class="relative">
+                            <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
+                              ?
+                            </span>
+                            <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
+                              SKU est le numéro d'identifiant unique que vous attribuez à un produit dans le stock pour faciliter son identification.
+                            </div>
+                          </div>
+                        </div>
+                        <input type="text" name="sku" value={editedProduct.sku} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                       </div>
-
-                      {/* Adresse */}
-                      <div>
-                        <label
-                          htmlFor="adresse"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Adresse
-                        </label>
-                        <input
-                          type="text"
-                          name="adresse"
-                          id="adresse"
-                          placeholder="Adresse de l'entreprise"
-                          onChange={handleSettingsFieldChange}
-                          value={settingsMe.adresse}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                        />
+                      <div className="mb-2">
+                        <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
+                        <input type="number" name="price" step="0.01" value={editedProduct.price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                       </div>
-
-                      {/* Téléphone */}
-                      <div>
-                        <label
-                          htmlFor="phone"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Téléphone
-                        </label>
-                        <input
-                          type="text"
-                          name="phone"
-                          id="phone"
-                          placeholder="Téléphone"
-                          required
-                          onChange={handleSettingsFieldChange}
-                          value={settingsMe.phone}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                        />
+                      <div className="mb-2">
+                        <label className="block mb-1 font-medium text-gray-700">Prix d'achat (FCFA) <span className='text-red-900'>*</span></label>
+                        <input type="number" name="buy_price" step="0.01" value={editedProduct.buy_price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                       </div>
-
-                      {/* Email */}
-                      <div>
-                        <label
-                          htmlFor="email"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          name="email"
-                          id="email"
-                          placeholder="Email"
-                          required
-                          onChange={handleSettingsFieldChange}
-                          value={settingsMe.email}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                        />
+                      <div className="mb-2">
+                        <label className="block mb-1 font-medium text-gray-700">Quantité <span className='text-red-900'>*</span></label>
+                        <input type="number" name="stock" value={editedProduct.stock} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
                       </div>
+                      <div className="mb-2">
+                        <div className='flex'>
+                          <label className="block mb-1 font-medium text-gray-700 mr-2">Stock d'alert</label>
+                          <div class="relative">
+                            <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
+                              ?
+                            </span>
+                            <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
+                              Le stock d'alert est la quantité à partir de laquelle l'application fera un rappel de réapprovisionnement
+                            </div>
+                          </div>
+                        </div>
+                        <input type="number" name="alert" value={editedProduct.alert} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block mb-1 font-medium text-gray-700">Image (optionnelle)</label>
+                        <input type="file" name="image" accept="image/*" onChange={handleEditChange} className="w-full" />
+                      </div>
+                      <div className="flex gap-3">
+                        <button type="submit" className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 transition">
+                          Enregistrer les modifications
+                        </button>
+                        <button type="button" onClick={() => setEditProduct(null)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
+                          Annuler
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+                
+              )}
+              <table 
+                className={`hidden sm:table min-w-full border border-gray-300 rounded-lg overflow-x-scroll 
+                  ${darkMode ? "text-white border-gray-700" : ""}`}
+              >
+                <thead className={`${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                  <tr>
+                    {["Image", "Nom", "SKU", "Prix d'achat", "Prix de vente", "Quantité", "Qty Alert", "Statut", "Actions"].map((head) => (
+                      <th
+                        key={head}
+                        className={`px-6 py-3 text-left uppercase text-xs font-semibold tracking-wide
+                          ${darkMode 
+                            ? "text-gray-200 border-b border-gray-700" 
+                            : "text-gray-700 border-b border-gray-300"}`
+                        }
+                      >
+                        {head}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
 
-                      {/* Logo - admin seulement */}
-                      {user.role === 'admin' && (
-                        <div>
-                          <label
-                            htmlFor="logo"
-                            className={`block mb-1 font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                <tbody>
+                  {filteredProducts.map((p) => (
+                    <tr
+                      key={p.sku}
+                      className={`transition-colors ${
+                        darkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      {/* Image */}
+                      <td className={`px-6 py-4 text-sm border-b ${darkMode ? "border-gray-700" : "border-gray-300"}`}>
+                        <img 
+                          src={p.imageUrl || "/placeholder.png"} 
+                          width={40} height={40} 
+                          className="rounded object-cover" 
+                          alt={p.name} 
+                        />
+                      </td>
+
+                      {/* Infos produit */}
+                      <td className="px-6 py-4 text-sm font-bold border-b">{p.name}</td>
+                      <td className="px-6 py-4 text-sm border-b">{p.sku}</td>
+
+                      {/* Prix */}
+                      <td className="px-6 py-4 text-sm border-b">{p.buy_price} FCFA</td>
+                      <td className="px-6 py-4 text-sm border-b">{p.price} FCFA</td>
+
+                      {/* Stock */}
+                      <td className="px-6 py-4 text-sm border-b">{p.stock}</td>
+                      <td className="px-6 py-4 text-sm border-b">{p.alert}</td>
+
+                      {/* Statut */}
+                      <td className="px-6 py-4 text-sm border-b">
+                        {p.stock === 0 ? (
+                          <span className="inline-block px-2 py-1 text-xs font-semibold text-white bg-red-600 rounded">
+                            Épuisé
+                          </span>
+                        ) : p.stock <= p.alert ? (
+                          <span className="inline-block px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-300 rounded">
+                            Stock bas
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded">
+                            En stock
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className={`px-6 py-4 text-sm border-b min-w-[100px]`}>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            className="p-2 bg-blue-500 rounded-lg hover:bg-blue-600 shadow-sm" 
+                            onClick={() => handleEditProduct(p)}
                           >
-                            Logo
-                          </label>
-                          <input
-                            type="file"
-                            name="logo"
-                            id="logo"
-                            accept="image/*"
-                            className={`w-full ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
-                            onChange={handleSettingsLogoChange}
-                          />
+                            <FaEdit className="text-white" />
+                          </button>
+                          <button 
+                            className="p-2 bg-red-500 rounded-lg hover:bg-red-600 shadow-sm" 
+                            onClick={() => handleDeleteProduct(p.id)}
+                          >
+                            <FaTrash className="text-white" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="flex flex-col sm:hidden flex-1 gap-3">
+                {filteredProducts.map((p) => (
+                  <div
+                    key={p.sku}
+                    className={`p-3 rounded-xl shadow-md transition-all duration-200 ${darkMode ? 'bg-slate-700' :''}`}
+                    onClick={() => {setView('viewProduct'),handleEditProduct(p)}}
+                  >
+                    <div className="flex items-center gap-3">
+                      {p.imageUrl ? (
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          className="w-14 h-14 rounded-lg object-cover border border-gray-200"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 flex items-center justify-center bg-gray-300 text-xs text-gray-700 rounded-lg">
+                          Pas d'image
                         </div>
                       )}
 
-                      {/* Username */}
-                      <div>
-                        <label
-                          htmlFor="username"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                      <div className="flex-1">
+                        <h3
+                          className={`font-semibold text-sm text-gray-800 ${darkMode ? 'text-white/80' :''}`}
                         >
-                          Nom d'utilisateur <span className='text-red-800'>*</span>
-                        </label>
-                        <input
-                          type="text"
-                          name="username"
-                          id="username"
-                          required
-                          onChange={handleSettingsFieldChange}
-                          value={settingsMe.username}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                        />
-                      </div>
-                    </>
-                  )}
-                  {showPasswordChange && (
-                    <>
-                      <div>
-                        <label
-                          htmlFor="oldPassword"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Ancien mot de passe <span className='text-red-800'>*</span>
-                        </label>
-                        <input
-                          type="password"
-                          name="oldPassword"
-                          id="oldPassword"
-                          value={oldPassword}
-                          onChange={(e) => setOldPassword(e.target.value)}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="newPassword"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Nouveau mot de passe <span className='text-red-800'>*</span>
-                        </label>
-                        <input
-                          type="password"
-                          name="newPassword"
-                          id="newPassword"
-                          placeholder='Minimum 6 caractères'
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="confirmPassword"
-                          className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Confirmer le mot de passe <span className='text-red-800'>*</span>
-                        </label>
-                        <input
-                          type="password"
-                          name="confirmPassword"
-                          id="confirmPassword"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
-                            ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                          required
-                        />
-                      </div>
-                    </>
-                  )}
-                  {/* Boutons */}
-                  <button
-                    type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
-                  >
-                    Enregistrer
-                  </button>
+                          {p.name}
+                        </h3>
+                        <p className="text-xs text-gray-500">Sku: {p.sku}</p>
 
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswordChange(!showPasswordChange)}
-                    className={`w-full text-sm underline font-medium ${
-                      darkMode ? 'text-blue-400' : 'text-blue-700'
-                    }`}
-                  >
-                    {showPasswordChange ? 'Annuler' : 'Changer mon mot de passe'}
-                  </button>
-                </form>
-
-              )}
-              {settingsSelectedMenu === 'utilisateurs' && (
-                <>
-                  <div className='flex flex-col'>
-                    <h1 className={`text-3xl font-bold mb-6 text-gray-800 text-center ${darkMode ? 'text-white' : ''}`}>Gestion des utilisateurs</h1>
-
-                    <div className="flex justify-end gap-4 mb-6">
-                      <div className="relative flex-1">
-                        <FaSearch className="absolute left-3 top-3 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Rechercher par nom ou email"
-                          onChange={(e) => filteredSubUsers(e)}
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                        />
+                        <div className="mt-1 flex justify-between items-center text-sm">
+                          <p className="font-bold">Qté: {p.stock}</p>
+                          <p className={`font-bold ${darkMode ? 'text-white/80' :''}`}>{p.price} FCFA</p>
+                        </div>
                       </div>
-
-                      <button 
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                        onClick={() => setEmployeeForm(true)}
-                      >
-                        <FaUserPlus /> Ajouter
-                      </button>
                     </div>
 
-                    <div className='flex justify-center items-center mb-2'>
-                      {employeeForm && 
-                        <form 
-                          className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1"
-                          onSubmit={employeesFormSubmit}
-                        >
-                          <div className='flex justify-end items-center'>
-                            <button 
-                              type="button"
-                              onClick={() => setEmployeeForm(false)}
-                            >
-                              <FaWindowClose className='text-red-500'/>
-                            </button>
+                    {/* Badge dynamique de stock */}
+                    <div className="mt-2">
+                      {p.stock === 0 ? (
+                        <span className="inline-block px-2 py-1 text-xs font-semibold text-white bg-red-700 rounded">
+                          Épuisé
+                        </span>
+                      ) : p.stock <= p.alert ? (
+                        <span className="inline-block px-2 py-1 text-xs font-semibold text-black bg-yellow-300 rounded">
+                          Stock bas
+                        </span>
+                      ) : (
+                        <span className="inline-block px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded">
+                          En stock
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {view === 'viewProduct' && (
+            <SelectedProduct 
+              darkMode={darkMode} 
+              editedProduct={editedProduct} 
+              setEditProduct={setEditProduct} 
+              handleEditChange={handleEditChange} 
+              submitEditProduct={submitEditProduct} 
+              setView={setView}
+              loadProducts={loadProducts}
+              editProduct={editProduct}/>
+          )}
+
+          {view === 'sales' && (
+            <div className="p-4">
+              <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>🧾 Historique des ventes</h2>
+
+              {/* Filtres et export */}
+              <div className="flex flex-wrap gap-3 mb-6">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  onClick={downloadCSV}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+                >
+                  📥 Exporter CSV
+                </button>
+              </div>
+
+              {/* Liste des ventes */}
+              <div className="max-h-[600px] overflow-auto space-y-6">
+                {sales.map((s) => {
+                  // Si s.items est un JSON stringifié
+                  let items = [];
+                  try {
+                    items = typeof s.items === 'string' ? JSON.parse(s.items) : s.items;
+                  } catch (e) {
+                    console.error('Erreur parsing items:', e);
+                    items = [];
+                  }
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`rounded-xl p-5 shadow-sm hover:shadow-md transition ${
+                        darkMode
+                          ? 'border border-slate-700 bg-slate-800 text-gray-100'
+                          : 'border border-gray-200 bg-white text-gray-800'
+                      }`}
+                    >
+                      {/* En-tête vente */}
+                      <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-2">
+                        <div>
+                          <h3 className="text-lg font-semibold">
+                            🧾 Vente #{s.id}
+                          </h3>
+                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {new Date(s.date).toLocaleString()}
+                          </p>
+                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            Vendeur: <span className={`${darkMode ? 'text-white' : 'text-black'} font-semibold`}>{s.seller}</span>
+                          </p>
+                        </div>
+                        <div className="text-left md:text-right">
+                          <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total</span>
+                          <div className={`text-xl font-bold ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                            FCFA {s.total.toFixed(2)}
                           </div>
-                          <h2 className="text-center text-1xl font-bold">
-                            Ajout un employé
-                          </h2>
+                        </div>
+                      </div>
+
+                      {/* Tableau des articles */}
+                      <div className="overflow-x-auto w-full">
+                        <table
+                          className={`min-w-full text-sm border rounded-lg ${
+                            darkMode ? 'border-slate-700' : 'border-gray-300'
+                          }`}
+                        >
+                          <thead className={`${darkMode ? 'bg-slate-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
+                            <tr>
+                              <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Produit</th>
+                              <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>SKU</th>
+                              <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Quantité</th>
+                              <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Prix unitaire</th>
+                              <th className={`px-4 py-2 border ${darkMode ? 'border-slate-600' : 'border-gray-300'}`}>Sous-total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((item, idx) => (
+                              <tr key={idx} className={`${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                                <td className={`px-4 py-2 border ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.name}</td>
+                                <td className={`px-4 py-2 border ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.sku}</td>
+                                <td className={`px-4 py-2 border text-center ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>{item.qty}</td>
+                                <td className={`px-4 py-2 border text-right ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>
+                                  FCFA {Number(item.price).toFixed(2)}
+                                </td>
+                                <td className={`px-4 py-2 border text-right ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>
+                                  FCFA {(item.price * item.qty).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {view === 'charts' && (
+            <div className="p-6 space-y-8">
+              {/* Titre */}
+              <h2 className={`text-3xl font-extrabold mb-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                📊 Statistiques des Ventes
+              </h2>
+
+              {/* BarChart */}
+              <div
+                className={`mx-auto rounded-2xl p-6 shadow-xl transition-colors duration-300
+                  ${darkMode 
+                    ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-gray-700' 
+                    : 'bg-white border border-gray-200'}`}
+              >
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={comparisonData}>
+                    <CartesianGrid strokeDasharray="4 4" stroke={darkMode ? '#4b5563' : '#e5e7eb'} />
+                    <XAxis dataKey="date" stroke={darkMode ? '#d1d5db' : '#374151'} />
+                    <YAxis tickFormatter={(v) => `FCFA ${v}`} stroke={darkMode ? '#d1d5db' : '#374151'} />
+                    <Tooltip formatter={(v) => `FCFA ${v}`} />
+                    <Legend />
+                    <Bar dataKey="vente" fill="#4F46E5" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="achat" fill="#F97316" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* PieChart */}
+              <div
+                className={`mx-auto rounded-2xl p-6 shadow-xl transition-colors duration-300
+                  ${darkMode 
+                    ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-gray-700' 
+                    : 'bg-white border border-gray-200'}`}
+              >
+                <h3 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                  Produits les plus vendus
+                </h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={productChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={110}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      isAnimationActive={true}
+                    >
+                      {productChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value, name) => [`${value} FCFA`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+          )}
+          {view === 'profil' && (
+            <div className="flex-grow relative">
+              <h2 className={`text-center font-2xl font-bold mb-2 ${darkMode ? 'text-white' : ''}`}>Mon profil</h2>
+              <div className="flex flex-grow flex pb-20">
+                <div className="flex-grow flex justify-center items-center">
+                  {settingsSelectedMenu === 'informations' && (
+                    <form
+                      onSubmit={showPasswordChange ? handlePasswordReset : settingsSubmit}
+                      className={`p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1 transition-colors duration-300
+                        ${darkMode ? 'bg-slate-800 text-gray-100 border border-gray-100' : 'bg-white text-gray-800'}`}
+                    >
+                      <h2 className="text-center font-bold">{showPasswordChange ? 'Changer le mot de passe' : 'Mes informations'}</h2>
+                      {!showPasswordChange && (
+                        <>
+                          {/* Nom */}
                           <div>
                             <label
                               htmlFor="name"
-                              className="block text-sm font-medium text-gray-700"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                             >
-                              Nom <span className='text-red-600'>*</span>
+                              Nom <span className='text-red-800'>*</span>
                             </label>
                             <input
                               type="text"
@@ -1595,17 +1388,20 @@ export default function App() {
                               id="name"
                               placeholder="Nom"
                               required
-                              onChange={(e) => setEmployeesFormData({...employeesFormData, name: e.target.value})}
-                              value={employeesFormData.name}
-                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                              onChange={handleSettingsFieldChange}
+                              value={settingsMe.name}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                             />
                           </div>
+
+                          {/* Prénom */}
                           <div>
                             <label
                               htmlFor="surname"
-                              className="block text-sm font-medium text-gray-700"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                             >
-                              Prénom <span className='text-red-600'>*</span>
+                              Prénom <span className='text-red-800'>*</span>
                             </label>
                             <input
                               type="text"
@@ -1613,15 +1409,39 @@ export default function App() {
                               id="surname"
                               placeholder="Prénom"
                               required
-                              onChange={(e) => setEmployeesFormData({...employeesFormData, surname: e.target.value})}
-                              value={employeesFormData.surname}
-                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                              onChange={handleSettingsFieldChange}
+                              value={settingsMe.surname}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                             />
                           </div>
+
+                          {/* Entreprise */}
+                          <div>
+                            <label
+                              htmlFor="entreprise"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                            >
+                              Entreprise
+                            </label>
+                            <input
+                              type="text"
+                              name="entreprise"
+                              id="entreprise"
+                              placeholder="Nom de l'entreprise"
+                              disabled={user.role !== 'admin'}
+                              onChange={handleSettingsFieldChange}
+                              value={settingsMe.entreprise}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                            />
+                          </div>
+
+                          {/* Adresse */}
                           <div>
                             <label
                               htmlFor="adresse"
-                              className="block text-sm font-medium text-gray-700"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                             >
                               Adresse
                             </label>
@@ -1630,17 +1450,20 @@ export default function App() {
                               name="adresse"
                               id="adresse"
                               placeholder="Adresse de l'entreprise"
-                              onChange={(e) => setEmployeesFormData({...employeesFormData, adresse: e.target.value})}
-                              value={employeesFormData.adresse}
-                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                              onChange={handleSettingsFieldChange}
+                              value={settingsMe.adresse}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                             />
                           </div>
+
+                          {/* Téléphone */}
                           <div>
                             <label
                               htmlFor="phone"
-                              className="block text-sm font-medium text-gray-700"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                             >
-                              Téléphone <span className='text-red-600'>*</span>
+                              Téléphone
                             </label>
                             <input
                               type="text"
@@ -1648,162 +1471,513 @@ export default function App() {
                               id="phone"
                               placeholder="Téléphone"
                               required
-                              onChange={(e) => setEmployeesFormData({...employeesFormData, phone: e.target.value})}
-                              value={employeesFormData.phone}
-                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                              onChange={handleSettingsFieldChange}
+                              value={settingsMe.phone}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                             />
                           </div>
+
+                          {/* Email */}
                           <div>
                             <label
                               htmlFor="email"
-                              className="block text-sm font-medium text-gray-700"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                             >
-                              Email <span className='text-red-600'>*</span>
+                              Email
                             </label>
                             <input
                               type="email"
                               name="email"
                               id="email"
                               placeholder="Email"
-                              onChange={(e) => setEmployeesFormData({...employeesFormData, email: e.target.value})}
-                              value={employeesFormData.email}
-                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                              required
+                              onChange={handleSettingsFieldChange}
+                              value={settingsMe.email}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                             />
                           </div>
+
+                          {/* Logo - admin seulement */}
+                          {user.role === 'admin' && (
+                            <div>
+                              <label
+                                htmlFor="logo"
+                                className={`block mb-1 font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                              >
+                                Logo
+                              </label>
+                              <input
+                                type="file"
+                                name="logo"
+                                id="logo"
+                                accept="image/*"
+                                className={`w-full ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
+                                onChange={handleSettingsLogoChange}
+                              />
+                            </div>
+                          )}
+
+                          {/* Username */}
                           <div>
                             <label
                               htmlFor="username"
-                              className="block text-sm font-medium text-gray-700"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                             >
-                              Nom d'utilisateur <span className='text-red-600'>*</span>
+                              Nom d'utilisateur <span className='text-red-800'>*</span>
                             </label>
                             <input
                               type="text"
                               name="username"
                               id="username"
                               required
-                              onChange={(e) => setEmployeesFormData({...employeesFormData, username: e.target.value})}
-                              value={employeesFormData.username}
-                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                              onChange={handleSettingsFieldChange}
+                              value={settingsMe.username}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                             />
                           </div>
-                          <div>
-                            <label htmlFor='role' className="block text-sm font-medium text-gray-700">Role</label>
-                            <select 
-                              name="role" 
-                              id="role" 
-                              className='mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500'
-                              onChange={(e) => setEmployeesFormData({...employeesFormData, role: e.target.value})}
-                            >
-                              <option value="admin">Admin</option>
-                              <option value="autres">Autres</option>
-                            </select>
-                          </div>
+                        </>
+                      )}
+                      {showPasswordChange && (
+                        <>
                           <div>
                             <label
-                              htmlFor="password"
-                              className="block text-sm font-medium text-gray-700"
+                              htmlFor="oldPassword"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                             >
-                              Mot de passe <span className='text-red-600'>*</span>
+                              Ancien mot de passe <span className='text-red-800'>*</span>
                             </label>
                             <input
                               type="password"
-                              name="password"
-                              id="password"
+                              name="oldPassword"
+                              id="oldPassword"
+                              value={oldPassword}
+                              onChange={(e) => setOldPassword(e.target.value)}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                               required
-                              onChange={(e) => setEmployeesFormData({...employeesFormData, password: e.target.value})}
-                              value={employeesFormData.password}
-                              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                             />
                           </div>
-                          <button
-                            type="submit"
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
-                          >
-                            Enregistrer
-                          </button>
-                          <button 
-                            type="button"
-                            className="w-full text-blue-700"
-                          >
-                            Changer mon mot de passe
-                          </button>
-                        </form>
-                      }
+                          <div>
+                            <label
+                              htmlFor="newPassword"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                            >
+                              Nouveau mot de passe <span className='text-red-800'>*</span>
+                            </label>
+                            <input
+                              type="password"
+                              name="newPassword"
+                              id="newPassword"
+                              placeholder='Minimum 6 caractères'
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="confirmPassword"
+                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                            >
+                              Confirmer le mot de passe <span className='text-red-800'>*</span>
+                            </label>
+                            <input
+                              type="password"
+                              name="confirmPassword"
+                              id="confirmPassword"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                              required
+                            />
+                          </div>
+                        </>
+                      )}
+                      {/* Boutons */}
+                      <button
+                        type="submit"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
+                      >
+                        Enregistrer
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordChange(!showPasswordChange)}
+                        className={`w-full text-sm underline font-medium ${
+                          darkMode ? 'text-blue-400' : 'text-blue-700'
+                        }`}
+                      >
+                        {showPasswordChange ? 'Annuler' : 'Changer mon mot de passe'}
+                      </button>
+                    </form>
+
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {view === 'employees' && (
+            <div className="flex-grow relative">
+              <div className="flex flex-grow flex pb-20">
+                <div className="flex-grow flex justify-center items-center">
+                <div className='flex flex-col'>
+                  <h1 className={`text-3xl font-bold mb-6 text-gray-800 text-center ${darkMode ? 'text-white' : ''}`}>Gestion des utilisateurs</h1>
+
+                  <div className="flex justify-end gap-4 mb-6">
+                    <div className="relative flex-1">
+                      <FaSearch className="absolute left-3 top-3 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Rechercher par nom ou email"
+                        onChange={(e) => filteredSubUsers(e)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      />
                     </div>
 
-                    <div
-                      className={`rounded-xl shadow overflow-hidden transition ${
-                        darkMode ? 'bg-slate-800 text-gray-100' : 'bg-white text-gray-800'
-                      }`}
+                    <button 
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                      onClick={() => setEmployeeForm(true)}
                     >
-                      {/* Table mode (desktop et tablette) */}
-                      <table className="w-full table-auto hidden md:table">
-                        <thead className={darkMode ? 'bg-slate-700 text-gray-200' : 'bg-gray-100 text-gray-700'}>
+                      <FaUserPlus /> Ajouter
+                    </button>
+                  </div>
+
+                  <div className='flex justify-center items-center mb-2'>
+                    {employeeForm && 
+                      <form 
+                        className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1"
+                        onSubmit={employeesFormSubmit}
+                      >
+                        <div className='flex justify-end items-center'>
+                          <button 
+                            type="button"
+                            onClick={() => setEmployeeForm(false)}
+                          >
+                            <FaWindowClose className='text-red-500'/>
+                          </button>
+                        </div>
+                        <h2 className="text-center text-1xl font-bold">
+                          Ajout un employé
+                        </h2>
+                        <div>
+                          <label
+                            htmlFor="name"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Nom <span className='text-red-600'>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="name"
+                            id="name"
+                            placeholder="Nom"
+                            required
+                            onChange={(e) => setEmployeesFormData({...employeesFormData, name: e.target.value})}
+                            value={employeesFormData.name}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="surname"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Prénom <span className='text-red-600'>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="surname"
+                            id="surname"
+                            placeholder="Prénom"
+                            required
+                            onChange={(e) => setEmployeesFormData({...employeesFormData, surname: e.target.value})}
+                            value={employeesFormData.surname}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="adresse"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Adresse
+                          </label>
+                          <input
+                            type="text"
+                            name="adresse"
+                            id="adresse"
+                            placeholder="Adresse de l'entreprise"
+                            onChange={(e) => setEmployeesFormData({...employeesFormData, adresse: e.target.value})}
+                            value={employeesFormData.adresse}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="phone"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Téléphone <span className='text-red-600'>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="phone"
+                            id="phone"
+                            placeholder="Téléphone"
+                            required
+                            onChange={(e) => setEmployeesFormData({...employeesFormData, phone: e.target.value})}
+                            value={employeesFormData.phone}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="email"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Email <span className='text-red-600'>*</span>
+                          </label>
+                          <input
+                            type="email"
+                            name="email"
+                            id="email"
+                            placeholder="Email"
+                            onChange={(e) => setEmployeesFormData({...employeesFormData, email: e.target.value})}
+                            value={employeesFormData.email}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="username"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Nom d'utilisateur <span className='text-red-600'>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="username"
+                            id="username"
+                            required
+                            onChange={(e) => setEmployeesFormData({...employeesFormData, username: e.target.value})}
+                            value={employeesFormData.username}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor='role' className="block text-sm font-medium text-gray-700">Role</label>
+                          <select 
+                            name="role" 
+                            id="role" 
+                            className='mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500'
+                            onChange={(e) => setEmployeesFormData({...employeesFormData, role: e.target.value})}
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="autres">Autres</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="password"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Mot de passe <span className='text-red-600'>*</span>
+                          </label>
+                          <input
+                            type="password"
+                            name="password"
+                            id="password"
+                            required
+                            onChange={(e) => setEmployeesFormData({...employeesFormData, password: e.target.value})}
+                            value={employeesFormData.password}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
+                        >
+                          Enregistrer
+                        </button>
+                        <button 
+                          type="button"
+                          className="w-full text-blue-700"
+                        >
+                          Changer mon mot de passe
+                        </button>
+                      </form>
+                    }
+                  </div>
+
+                  <div
+                    className={`rounded-xl shadow overflow-hidden transition ${
+                      darkMode ? 'bg-slate-800 text-gray-100' : 'bg-white text-gray-800'
+                    }`}
+                  >
+                    {/* Table mode (desktop et tablette) */}
+                    <table className="w-full table-auto hidden md:table">
+                      <thead className={darkMode ? 'bg-slate-700 text-gray-200' : 'bg-gray-100 text-gray-700'}>
+                        <tr>
+                          <th className="text-left px-4 py-3">Nom</th>
+                          <th className="text-left px-4 py-3">Prenom</th>
+                          <th className="text-left px-4 py-3">Username</th>
+                          <th className="text-left px-4 py-3">Phone</th>
+                          <th className="text-left px-4 py-3">Email</th>
+                          <th className="text-left px-4 py-3">Adresse</th>
+                          <th className="text-left px-4 py-3">Rôle</th>
+                          <th className="text-right px-4 py-3">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {subUsersFiltered.length === 0 ? (
                           <tr>
-                            <th className="text-left px-4 py-3">Nom</th>
-                            <th className="text-left px-4 py-3">Prenom</th>
-                            <th className="text-left px-4 py-3">Username</th>
-                            <th className="text-left px-4 py-3">Phone</th>
-                            <th className="text-left px-4 py-3">Email</th>
-                            <th className="text-left px-4 py-3">Adresse</th>
-                            <th className="text-left px-4 py-3">Rôle</th>
-                            <th className="text-right px-4 py-3">Actions</th>
+                            <td
+                              colSpan="8"
+                              className={`text-center py-6 ${
+                                darkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}
+                            >
+                              Aucun utilisateur trouvé.
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {subUsersFiltered.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan="8"
-                                className={`text-center py-6 ${
-                                  darkMode ? 'text-gray-400' : 'text-gray-500'
-                                }`}
-                              >
-                                Aucun utilisateur trouvé.
+                        ) : (
+                          subUsersFiltered.map((subUser) => (
+                            <tr key={subUser.id} className={darkMode ? 'border-t border-slate-700' : 'border-t border-gray-200'}>
+                              <td className="px-4 py-3">{subUser.name}</td>
+                              <td className="px-4 py-3">{subUser.surname}</td>
+                              <td className="px-4 py-3">{subUser.username}</td>
+                              <td className="px-4 py-3">{subUser.phone}</td>
+                              <td className="px-4 py-3">{subUser.email}</td>
+                              <td className="px-4 py-3">{subUser.adresse}</td>
+                              <td className="px-4 py-3">{subUser.role}</td>
+                              <td className="px-4 py-3 text-right space-x-3">
+                                <button 
+                                  className="text-yellow-500 hover:text-yellow-400"
+                                  onClick={() => {
+                                    setSubUserId(subUser.id);
+                                    setEditedSubUserData({
+                                      name: subUser.name,
+                                      surname: subUser.surname,
+                                      username: subUser.username,
+                                      phone: subUser.phone,
+                                      email: subUser.email,
+                                      adresse: subUser.adresse,
+                                      role: subUser.role,
+                                      password: ''
+                                    })
+                                  }}  
+                                >
+                                  <FaEdit />
+                                </button>
+                                <button 
+                                  className="text-red-500 hover:text-red-400"
+                                  onClick={() => setSubUserToDelete(subUser.id)}
+                                >
+                                  <FaTrash />
+                                </button>
                               </td>
                             </tr>
-                          ) : (
-                            subUsersFiltered.map((subUser) => (
-                              <tr key={subUser.id} className={darkMode ? 'border-t border-slate-700' : 'border-t border-gray-200'}>
-                                <td className="px-4 py-3">{subUser.name}</td>
-                                <td className="px-4 py-3">{subUser.surname}</td>
-                                <td className="px-4 py-3">{subUser.username}</td>
-                                <td className="px-4 py-3">{subUser.phone}</td>
-                                <td className="px-4 py-3">{subUser.email}</td>
-                                <td className="px-4 py-3">{subUser.adresse}</td>
-                                <td className="px-4 py-3">{subUser.role}</td>
-                                <td className="px-4 py-3 text-right space-x-3">
-                                  <button 
-                                    className="text-yellow-500 hover:text-yellow-400"
-                                    onClick={() => {
-                                      setSubUserId(subUser.id);
-                                      setEditedSubUserData({
-                                        name: subUser.name,
-                                        surname: subUser.surname,
-                                        username: subUser.username,
-                                        phone: subUser.phone,
-                                        email: subUser.email,
-                                        adresse: subUser.adresse,
-                                        role: subUser.role,
-                                        password: ''
-                                      })
-                                    }}  
-                                  >
-                                    <FaEdit />
-                                  </button>
-                                  <button 
-                                    className="text-red-500 hover:text-red-400"
-                                    onClick={() => setSubUserToDelete(subUser.id)}
-                                  >
-                                    <FaTrash />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                    {subUserToDelete && (
+                      <div className={`fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50`}>
+                        <div className={`p-6 rounded-lg shadow-lg w-full max-w-sm border
+                          ${darkMode ? 'bg-slate-800 border-gray-100 text-white' : 'bg-white border-gray-300 text-gray-800'}`}>
+                          
+                          <h3 className="text-lg font-semibold mb-4 text-center">
+                            Confirmer la suppression ?
+                          </h3>
+                          <p className="text-center mb-6 text-red-600">
+                            Cette action est <strong>irréversible</strong>.
+                          </p>
+
+                          <div className="flex justify-between gap-4">
+                            <button
+                              onClick={() => handleDeleteSubUser(subUserToDelete)}
+                              className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+                            >
+                              Supprimer
+                            </button>
+                            <button
+                              onClick={() => setSubUserToDelete(null)}
+                              className={`flex-1 px-4 py-2 rounded font-semibold transition
+                                ${darkMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-gray-300 hover:bg-gray-400'}`}
+                            >
+                              Annuler
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mobile card mode */}
+                    <div className={darkMode ? 'md:hidden divide-y divide-slate-700' : 'md:hidden divide-y divide-gray-200'}>
+                      {subUsersFiltered.length === 0 ? (
+                        <p className={`text-center py-6 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Aucun utilisateur trouvé.
+                        </p>
+                      ) : (
+                        subUsersFiltered.map((subUser) => (
+                          <div key={subUser.id} className="p-4">
+                            <p>
+                              <span className="font-semibold">Nom:</span> {subUser.name}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Prénom:</span> {subUser.surname}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Username:</span> {subUser.username}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Téléphone:</span> {subUser.phone}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Email:</span> {subUser.email}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Adresse:</span> {subUser.adresse}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Rôle:</span> {subUser.role}
+                            </p>
+                            <div className="flex justify-end space-x-3 mt-2">
+                              <button 
+                                className="text-yellow-500 hover:text-yellow-400"
+                                onClick={() => {
+                                  setSubUserId(subUser.id);
+                                  setEditedSubUserData({
+                                    name: subUser.name,
+                                    surname: subUser.surname,
+                                    username: subUser.username,
+                                    phone: subUser.phone,
+                                    email: subUser.email,
+                                    adresse: subUser.adresse,
+                                    role: subUser.role,
+                                    password: ''
+                                  })
+                                }} 
+                              >
+                                <FaEdit />
+                              </button>
+                              <button 
+                                className="text-red-500 hover:text-red-400"
+                                onClick={() => setSubUserToDelete(subUser.id)}
+                              >
+                                <FaTrash />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
                       {subUserToDelete && (
                         <div className={`fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50`}>
                           <div className={`p-6 rounded-lg shadow-lg w-full max-w-sm border
@@ -1812,7 +1986,7 @@ export default function App() {
                             <h3 className="text-lg font-semibold mb-4 text-center">
                               Confirmer la suppression ?
                             </h3>
-                            <p className="text-center mb-6 text-red-600">
+                            <p className="text-center mb-6">
                               Cette action est <strong>irréversible</strong>.
                             </p>
 
@@ -1834,257 +2008,131 @@ export default function App() {
                           </div>
                         </div>
                       )}
-
-                      {/* Mobile card mode */}
-                      <div className={darkMode ? 'md:hidden divide-y divide-slate-700' : 'md:hidden divide-y divide-gray-200'}>
-                        {subUsersFiltered.length === 0 ? (
-                          <p className={`text-center py-6 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Aucun utilisateur trouvé.
-                          </p>
-                        ) : (
-                          subUsersFiltered.map((subUser) => (
-                            <div key={subUser.id} className="p-4">
-                              <p>
-                                <span className="font-semibold">Nom:</span> {subUser.name}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Prénom:</span> {subUser.surname}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Username:</span> {subUser.username}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Téléphone:</span> {subUser.phone}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Email:</span> {subUser.email}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Adresse:</span> {subUser.adresse}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Rôle:</span> {subUser.role}
-                              </p>
-                              <div className="flex justify-end space-x-3 mt-2">
-                                <button 
-                                  className="text-yellow-500 hover:text-yellow-400"
-                                  onClick={() => {
-                                    setSubUserId(subUser.id);
-                                    setEditedSubUserData({
-                                      name: subUser.name,
-                                      surname: subUser.surname,
-                                      username: subUser.username,
-                                      phone: subUser.phone,
-                                      email: subUser.email,
-                                      adresse: subUser.adresse,
-                                      role: subUser.role,
-                                      password: ''
-                                    })
-                                  }} 
-                                >
-                                  <FaEdit />
-                                </button>
-                                <button 
-                                  className="text-red-500 hover:text-red-400"
-                                  onClick={() => setSubUserToDelete(subUser.id)}
-                                >
-                                  <FaTrash />
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                        {subUserToDelete && (
-                          <div className={`fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50`}>
-                            <div className={`p-6 rounded-lg shadow-lg w-full max-w-sm border
-                              ${darkMode ? 'bg-slate-800 border-gray-100 text-white' : 'bg-white border-gray-300 text-gray-800'}`}>
-                              
-                              <h3 className="text-lg font-semibold mb-4 text-center">
-                                Confirmer la suppression ?
-                              </h3>
-                              <p className="text-center mb-6">
-                                Cette action est <strong>irréversible</strong>.
-                              </p>
-
-                              <div className="flex justify-between gap-4">
-                                <button
-                                  onClick={() => handleDeleteSubUser(subUserToDelete)}
-                                  className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
-                                >
-                                  Supprimer
-                                </button>
-                                <button
-                                  onClick={() => setSubUserToDelete(null)}
-                                  className={`flex-1 px-4 py-2 rounded font-semibold transition
-                                    ${darkMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-gray-300 hover:bg-gray-400'}`}
-                                >
-                                  Annuler
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
                     </div>
-                    {subUserId && (
-                      <SubUserEditForm handleEditSubUserSubmit={handleEditSubUserSubmit} darkMode={darkMode} editedSubUserData={editedSubUserData}
-                        setEditedSubUserData={setEditedSubUserData} setSubUserId={setSubUserId}
-                      />
-                    )}
                   </div>
-                </>
-              )}
-              {settingsSelectedMenu === 'apropos' && (
-                <>
-                  <AboutPage darkMode={darkMode}/>
-                </>
+                  {subUserId && (
+                    <SubUserEditForm handleEditSubUserSubmit={handleEditSubUserSubmit} darkMode={darkMode} editedSubUserData={editedSubUserData}
+                      setEditedSubUserData={setEditedSubUserData} setSubUserId={setSubUserId}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+            </div>
+          )}
+          {view === 'about' && (
+            <div className="flex-grow relative">
+              <div className="flex flex-grow flex pb-20">
+                <div className="flex-grow flex justify-center items-center">
+                <AboutPage darkMode={darkMode}/>
+                </div>
+              </div>
+            </div>
+          )}
+          {view == 'analyse' && (
+            // {analyserAvecIA}
+            <div className={`p-6 max-w-3xl mx-auto`}>
+              <h2 className={`text-2xl font-bold mb-4 text-center ${darkMode ? 'text-white' : 'text-indigo-700'}`}>🔍 Analyse IA des ventes</h2>
+              
+              <div className="text-center mb-6">
+                <button 
+                  onClick={handleAnalyseIA}
+                  disabled={loadingAI}
+                  className={`${user.tokens_conseil == 0 ? 'bg-red-600': 'bg-purple-600'} hover:bg-purple-700 text-white px-6 py-2 rounded shadow`}>
+                  {loadingAI ? "Analyse en cours..." : "Lancer l’analyse"}
+                </button>
+              </div>
+
+              {analyseMarkDown && (
+                <div className={`prose prose-lg w-full p-4 rounded-xl shadow border overflow-auto break-words
+                  ${darkMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white'}`
+                  }>
+                  <ReactMarkdown>{analyseMarkDown}</ReactMarkdown>
+                </div>
               )}
             </div>
-          </div>
-          {/*Parametre menu navigant */}
-          <div className="fixed bottom-0 left-0 w-full flex p-2 flex items-start justify-center rounded shadow">
-            <ul className="w-full flex justify-center gap-3 bg-violet-300 py-2 rounded-full">
-              <li
-                className={`py-2 px-3 rounded cursor-pointer w-10 flex justify-center items-center rounded-full
-                  ${
-                    settingsSelectedMenu === 'informations'
-                      ? 'bg-violet-400'
-                      : 'h-10 bg-white/70 hover:bg-white/90'
-                  }`}
-                onClick={() => setSettingsSelectedMenu('informations')}
-              >
-                <FaUser />
-              </li>
-              {user.role === 'admin' && 
-                <li
-                  className={`py-2 px-3 rounded cursor-pointer w-10 h-10 flex justify-center items-center rounded-full
-                    ${
-                      settingsSelectedMenu === 'utilisateurs'
-                        ? 'bg-violet-400'
-                        : 'h-10 bg-white/70 hover:bg-white/90'
-                    }`}
-                  onClick={() => setSettingsSelectedMenu('utilisateurs')}
-                >
-                  <FaUsers/>
-                </li>
-              }
-              <li
-                className={`py-2 px-3 rounded cursor-pointer w-10 h-10 flex justify-center items-center rounded-full
-                  ${
-                    settingsSelectedMenu === 'apropos'
-                      ? 'bg-violet-400'
-                      : 'h-10 bg-white/70 hover:bg-white/90'
-                  }`}
-                onClick={() => setSettingsSelectedMenu('apropos')}
-              >
-                <FaInfo/>
-              </li>
-            </ul>
-          </div>
-        </div>
-      )}
-      {view == 'analyse' && (
-        // {analyserAvecIA}
-        <div className={`p-6 max-w-3xl mx-auto`}>
-          <h2 className={`text-2xl font-bold mb-4 text-center ${darkMode ? 'text-white' : 'text-indigo-700'}`}>🔍 Analyse IA des ventes</h2>
-          
-          <div className="text-center mb-6">
-            <button 
-              onClick={handleAnalyseIA}
-              disabled={loadingAI}
-              className={`${user.tokens_conseil == 0 ? 'bg-red-600': 'bg-purple-600'} hover:bg-purple-700 text-white px-6 py-2 rounded shadow`}>
-              {loadingAI ? "Analyse en cours..." : "Lancer l’analyse"}
+          )}
+          {/* Bouton panier mobile */}
+          {view !== 'settings' && 
+            <button onClick={() => setCartOpen(true)}
+              className="fixed bottom-4 right-4 bg-amber-600 border border-transparent text-center text-white text-lg text-slate-800 transition-all px-5 py-3 rounded-full shadow-lg sm:hidden z-50 flex-1 justify-center"
+              style={{width: '100px', height: '100px'}}>
+              <span className='flex justify-center'><FaShoppingCart className='text-xl'/></span>
+              <span>Panier ({cart.length})</span>
             </button>
-          </div>
+          }
+          {cartOpen && (
+            <div className="fixed inset-0 z-50 flex justify-end sm:hidden">
+              {/* Overlay */}
+              <div
+                className="fixed inset-0 bg-black bg-opacity-40"
+                onClick={() => setCartOpen(false)}
+              ></div>
 
-          {analyseMarkDown && (
-            <div className={`prose prose-lg w-full p-4 rounded-xl shadow border overflow-auto break-words
-              ${darkMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white'}`
-              }>
-              <ReactMarkdown>{analyseMarkDown}</ReactMarkdown>
+              {/* Drawer panier */}
+              <div className={`relative z-50 w-80 max-w-full shadow-xl h-full p-4 overflow-y-auto ${darkMode ? 'bg-slate-800' : 'bg-white'}`}>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className={`text-xl font-bold flex items-center gap-2 text-xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : ''}`}>
+                    <FaShoppingCart className={`${darkMode ? 'text-white' : ''}`}/> Panier
+                  </h2>
+                  <button onClick={() => setCartOpen(false)} className={`text-xl ${darkMode ? 'text-white' : 'text-gray-600'}`}>✕</button>
+                </div>
+
+                <ul>
+                  {cart.map((p) => (
+                    <li key={p.id} className="mb-3 flex justify-between items-center">
+                      <div className="flex-1">
+                        <div className={`font-semibold ${darkMode ? 'text-white' : ''}`}>{p.name}</div>
+                        <div className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-600'}`}>
+                          <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-black">−</button>
+                          <span className="mx-2">{p.qty}</span>
+                          <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-black">+</button>
+                          <span className="ml-4">= FCFA {(p.qty * p.price).toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => removeFromCart(p.id)} className="text-red-600 hover:text-red-800 ml-2">
+                        <FaTrash />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+
+                <hr className="my-3" />
+                <div className={`text-lg font-bold ${darkMode ? 'text-white/70' : ''}`}>Total : FCFA{total.toFixed(2)}</div>
+                <div className="flex items-center gap-2 mt-4">
+                  <input
+                    type="checkbox"
+                    id="generateInvoice"
+                    checked={generateInvoice}
+                    onChange={(e) => setGenerateInvoice(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <label htmlFor="generateInvoice" className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-700'}`}>
+                    Générer une facture PDF
+                  </label>
+                  {generateInvoice && (
+                    <input
+                      type="text"
+                      placeholder="Nom du client"
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                      className="w-full border px-3 py-2 rounded"
+                      required
+                    />
+                  )}
+                </div>
+                <button
+                  onClick={checkout}
+                  disabled={isLoadingCheckout}
+                  className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2"
+                >
+                  {isLoadingCheckout ? "Traitement..." : <><FaCheck /> Valider la vente</>}
+                </button>
+              </div>
             </div>
           )}
         </div>
-      )}
-      {/* Bouton panier mobile */}
-      {view !== 'settings' && 
-        <button onClick={() => setCartOpen(true)}
-          className="fixed bottom-4 right-4 bg-amber-600 border border-transparent text-center text-white text-lg text-slate-800 transition-all px-5 py-3 rounded-full shadow-lg sm:hidden z-50 flex-1 justify-center"
-          style={{width: '100px', height: '100px'}}>
-          <span className='flex justify-center'><FaShoppingCart className='text-xl'/></span>
-          <span>Panier ({cart.length})</span>
-        </button>
-      }
-      {cartOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end sm:hidden">
-          {/* Overlay */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-40"
-            onClick={() => setCartOpen(false)}
-          ></div>
-
-          {/* Drawer panier */}
-          <div className={`relative z-50 w-80 max-w-full shadow-xl h-full p-4 overflow-y-auto ${darkMode ? 'bg-slate-800' : 'bg-white'}`}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className={`text-xl font-bold flex items-center gap-2 text-xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : ''}`}>
-                <FaShoppingCart className={`${darkMode ? 'text-white' : ''}`}/> Panier
-              </h2>
-              <button onClick={() => setCartOpen(false)} className={`text-xl ${darkMode ? 'text-white' : 'text-gray-600'}`}>✕</button>
-            </div>
-
-            <ul>
-              {cart.map((p) => (
-                <li key={p.id} className="mb-3 flex justify-between items-center">
-                  <div className="flex-1">
-                    <div className={`font-semibold ${darkMode ? 'text-white' : ''}`}>{p.name}</div>
-                    <div className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-600'}`}>
-                      <button onClick={() => decreaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-black">−</button>
-                      <span className="mx-2">{p.qty}</span>
-                      <button onClick={() => increaseQty(p.id)} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-black">+</button>
-                      <span className="ml-4">= FCFA {(p.qty * p.price).toFixed(2)}</span>
-                    </div>
-                  </div>
-                  <button onClick={() => removeFromCart(p.id)} className="text-red-600 hover:text-red-800 ml-2">
-                    <FaTrash />
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            <hr className="my-3" />
-            <div className={`text-lg font-bold ${darkMode ? 'text-white/70' : ''}`}>Total : FCFA{total.toFixed(2)}</div>
-            <div className="flex items-center gap-2 mt-4">
-              <input
-                type="checkbox"
-                id="generateInvoice"
-                checked={generateInvoice}
-                onChange={(e) => setGenerateInvoice(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <label htmlFor="generateInvoice" className={`text-sm ${darkMode ? 'text-white/70' : 'text-gray-700'}`}>
-                Générer une facture PDF
-              </label>
-              {generateInvoice && (
-                <input
-                  type="text"
-                  placeholder="Nom du client"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                />
-              )}
-            </div>
-            <button
-              onClick={checkout}
-              disabled={isLoadingCheckout}
-              className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2"
-            >
-              {isLoadingCheckout ? "Traitement..." : <><FaCheck /> Valider la vente</>}
-            </button>
-          </div>
-        </div>
-      )}
+      </div>
       <ToastContainer />
     </div>
   );
