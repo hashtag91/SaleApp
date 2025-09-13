@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import {
-  FaShoppingCart, FaCog, FaLocationArrow, FaHome, FaTag, FaChevronRight, FaMoneyBill, FaChartArea, FaRobot
+  FaShoppingCart, FaCog, FaLocationArrow, FaHome, FaTag, FaChevronRight, FaMoneyBill, FaChartArea, FaRobot, FaHeadset
 } from 'react-icons/fa'
 
 export default function MobileDrawOpen({
@@ -57,15 +57,17 @@ export default function MobileDrawOpen({
               </p>
             </div>
           </div>
-          <div
-            className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
-              view === 'dashboard' ? 'bg-gray-200 text-gray-700' : ''
-            } ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}
-            onClick={() => { setView('dashboard'); closeDrawer() }}
-          >
-            <FaHome />
-            <button >Tableau de bord</button>
-          </div>
+          {user.role === 'admin' && (
+            <div
+              className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                view === 'dashboard' ? 'bg-gray-200 text-gray-700' : ''
+              } ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}
+              onClick={() => { setView('dashboard'); closeDrawer() }}
+            >
+              <FaHome />
+              <button >Tableau de bord</button>
+            </div>
+          )}
           <div
             className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
               view === 'pos' ? 'bg-gray-200 text-gray-700' : ''
@@ -75,7 +77,7 @@ export default function MobileDrawOpen({
             <FaShoppingCart />
             <button >Caisse</button>
           </div>
-          <div className={`flex flex-col gap-1 ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}>
+          {user.role === 'admin' && (<div className={`flex flex-col gap-1 ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}>
             <div
               className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${openMenu === 'stock' ? 'text-gray-700' : ''}`}
               onClick={() => toggleMenu('stock')}
@@ -106,14 +108,14 @@ export default function MobileDrawOpen({
               </li>
               <li
                 className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer ${
-                  view === 'category' ? 'bg-gray-200 text-gray-700' : ''
+                  view === 'categories' ? 'bg-gray-200 text-gray-700' : ''
                 }`}
-                onClick={() => setView('category')}
+                onClick={() => {setView('categories')}}
               >
-                Catégorie
+                Catégories
               </li>
             </ul>
-          </div>
+          </div>)}
           <div
             className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
               view === 'sales' ? 'bg-gray-200 text-gray-700' : ''
@@ -143,8 +145,14 @@ export default function MobileDrawOpen({
               disabled={loadingAI}
             >
               <FaRobot />
-              <button >
-                {loadingAI ? "Analyse en cours..." : "Conseil IA"}
+              <button className="text-gray-700 flex gap-2">
+                {loadingAI ? (
+                    "Analyse en cours..."
+                ) : (
+                    <>
+                    Analyse IA <div className='w-5 h-5 rounded-full bg-red-600 flex justify-center items-center'><span className='text-white'>{user.tokens_conseil}</span></div>
+                    </>
+                )}
               </button>
             </div>
           )}
@@ -198,6 +206,17 @@ export default function MobileDrawOpen({
                 </li>
             </ul>
           </div>
+          {user.role === 'admin' && (
+            <div
+              className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                view === 'support' ? 'bg-gray-200 text-gray-700' : ''
+              } ${darkMode ? 'text-gray-50' : 'text-gray-700'}`}
+              onClick={() => { setView('support'); closeDrawer() }}
+            >
+              <FaHeadset />
+              <button >Service client</button>
+            </div>
+          )}
           <button onClick={handleLogout} className='bg-red-600 text-white px-4 py-2 rounded'>
             Déconnexion
           </button>

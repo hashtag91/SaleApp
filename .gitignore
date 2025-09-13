@@ -3,3 +3,8 @@ backend/__pycache__/
 backend/.env
 frontend/node_modules/
 package-lock.json
+generate_pdf.py
+SaleApp_Fonctionnalites.pdf
+SaleApp_Marketing_Modern.pdf
+SaleApp_Marketing.pdf
+SaleApp_Marketing.py

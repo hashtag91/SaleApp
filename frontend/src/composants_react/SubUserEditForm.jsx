@@ -1,4 +1,5 @@
 import React from "react";
+import { ToastContainer, toast } from 'react-toastify';
 
 export default function SubUserEditForm ({handleEditSubUserSubmit, darkMode, editedSubUserData, setEditedSubUserData, setSubUserId}) {
     return (
@@ -38,7 +39,6 @@ export default function SubUserEditForm ({handleEditSubUserSubmit, darkMode, edi
                     className={`w-full border px-3 py-2 rounded transition
                     ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                 >
-                    <option value="admin">Admin</option>
                     <option value="autres">Autres</option>
                 </select>
                 </div>
@@ -65,16 +65,9 @@ export default function SubUserEditForm ({handleEditSubUserSubmit, darkMode, edi
                 >
                     Enregistrer
                 </button>
-                <button
-                    type="button"
-                    className={`flex-1 px-4 py-2 rounded transition font-semibold
-                    ${darkMode ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-300 text-gray-800 hover:bg-gray-400'}`}
-                    onClick={() => setSubUserId(null)}
-                >
-                    Annuler
-                </button>
                 </div>
             </form>
+            <ToastContainer />
         </div>
     )
 }

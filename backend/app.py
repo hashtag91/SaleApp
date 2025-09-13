@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_mail import Mail, Message
+from sqlalchemy import func
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -19,6 +20,9 @@ load_dotenv()
 from functools import wraps
 import requests
 import random
+from collections import defaultdict
+import re
+from flask_socketio import SocketIO, emit
 
 app = Flask(__name__, static_folder='build', static_url_path='')
 CORS(app)
@@ -33,6 +37,8 @@ app.config.update(
 )
 mail = Mail(app)
 API_KEY = os.getenv("API_KEY")
+
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 UPLOAD_FOLDER = os.path.join(app.root_path, 'build/static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -55,6 +61,7 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     sku = db.Column(db.String(80), unique=True, nullable=False)
+    category = db.Column(db.String(225), nullable=False, default='defaut')
     name = db.Column(db.String(80), nullable=False)
     price = db.Column(db.Float, nullable=False)
     buy_price = db.Column(db.Float, nullable=True)
@@ -101,6 +108,19 @@ class User(db.Model, UserMixin):
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+class Categories(db.Model):
+    id = db.Column(db.Integer, primary_key= True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    categorie = db.Column(db.String(225), nullable=False, default="defaut")
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    title = db.Column(db.String(225), nullable=False)
+    message = db.Column(db.String(255), nullable=False)
+    sale_id = db.Column(db.Integer, db.ForeignKey('sale.id'), nullable=True)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 def login_required(f):
     @wraps(f)
@@ -109,6 +129,15 @@ def login_required(f):
             return jsonify({'error': 'Authentification requise'}), 401
         return f(*args, **kwargs)
     return decorated_function
+
+@socketio.on('join_admin')
+def handle_join_admin(data):
+    admin_id = data.get("admin_id")
+    if admin_id:
+        from flask_socketio import join_room
+        join_room(f"admin_{admin_id}")
+        emit("status", {"message": f"Admin {admin_id} connecté à sa room"})
+
 
 # Décorateur pour vérifier que l'utilisateur est admin
 def admin_required(f):
@@ -130,14 +159,104 @@ def generate_reset_code():
     """Génère un code de réinitialisation aléatoire de 6 chiffres."""
     return ''.join(random.choices('0123456789', k=6))
 
+# Validation simple de l'email
+def is_valid_email(email):
+    return re.match(r"[^@]+@[^@]+\.[^@]+", email)
+
 def send_reset_email(email, reset_code):
     """Envoie un email de réinitialisation de mot de passe."""
+    if not is_valid_email(email):
+        return jsonify({'error': 'Email invalide.'}), 400
     msg = Message("Réinitialisation de votre mot de passe",
                   sender=os.getenv("MAIL_USERNAME"),
                   recipients=[email])
     msg.body = f"Votre code de réinitialisation est : {reset_code} pour réinitialiser votre mot de passe. Ce code est valable pendant 30 minutes."
     mail.send(msg)
 
+def get_weeks_of_year():
+    """
+    Retourne une liste de tuples représentant chaque semaine de l'année en cours.
+    Chaque tuple contient deux objets `date`, représentant la date de début et de fin de la semaine.
+
+    Les semaines débutent toujours le lundi.
+    """
+    # Obtenir la date d'aujourd'hui
+    today = date.today()
+    
+    # Définir la date du 1er janvier de cette année
+    start_year = date(today.year, 1, 1)
+    
+    # Liste pour stocker les semaines de l'année
+    weeks = []
+
+    # Début de la prémière semaine de l'année
+    current_start = start_year
+    
+    # Ajuster pour que la semaine commence le lundi
+    # Si la date de début n'est pas un lundi, on la décalle
+    if current_start.weekday() != 0:  # 0 = lundi
+        current_start -= timedelta(days=current_start.weekday())
+
+    # Boucle sur toutes les semaines
+    while current_start <= today:
+        # Fin de la semaine actuelle
+        current_end = current_start + timedelta(days=6)
+        
+        # Si la date de fin est après la date d'aujourd'hui, on la met à aujourd'hui
+        if current_end > today:
+            current_end = today
+        
+        # Ajouter la semaine à la liste
+        weeks.append((current_start, current_end))
+        
+        # Passer à la semaine suivante
+        current_start = current_end + timedelta(days=1)
+
+    # Retourner la liste des semaines
+    return weeks
+
+def get_months_of_year():
+    today = date.today()
+    year = today.year
+    months = []
+
+    for month in range(1, today.month + 1):
+        start_month = date(year, month, 1)
+        if month == 12:
+            end_month = date(year, 12, 31)
+        else:
+            # Le dernier jour du mois = premier jour du mois suivant - 1 jour
+            end_month = date(year, month + 1, 1) - timedelta(days=1)
+        months.append((start_month, end_month))
+    return months
+
+@app.route('/api/contact', methods=['POST'])
+@login_required
+@admin_required
+def contact():
+    data = request.get_json()  # <- Ici, tu récupères le JSON envoyé par axios
+    name = data.get('name')
+    email = data.get('email')
+    message = data.get('message')
+
+    # Validation
+    if not name or not email or not message:
+        return jsonify({'status': 'error', 'message': 'Tous les champs sont requis.'}), 400
+    if not is_valid_email(email):
+        return jsonify({'status': 'error', 'message': 'Email invalide.'}), 400
+
+    try:
+        # Envoi d'email
+        msg = Message(subject=f"Nouveau message de {name}",
+                      sender=os.getenv("MAIL_USERNAME"),
+                      recipients=[os.getenv("MAIL_USERNAME")],
+                      reply_to=email,
+                      body=f"Nom : {name}\nEmail : {email}\n\nMessage :\n{message}")
+        mail.send(msg)
+        return jsonify({'status': 'success', 'message': 'Message envoyé avec succès ! La réponse sera envoyée par email.'})
+    except Exception as e:
+        print(e)
+        return jsonify({'status': 'error', 'message': 'Erreur lors de l’envoi du message. Veuillez réessayer plus tard.'}), 500
 
 def is_safe_path(base_dir, path):
     basedir = os.path.abspath(base_dir)
@@ -215,7 +334,7 @@ def register():
         logo=logo_url,
         phone=phone or None,
         email=email or None,
-        role="Admin",
+        role="admin",
     )
     user.set_password(password)
 
@@ -411,6 +530,36 @@ def delete_employee(id):
     db.session.commit()
     return jsonify({'message': 'Employé supprimé avec succès'})
 
+@app.route('/api/best_seller', methods=['GET'])
+@login_required
+@admin_required
+def best_seller():
+    # Date actuelle
+    now = datetime.now()
+    year, month = now.year, now.month
+
+    # Regrouper par vendeur et calculer le total
+    # Trouver le vendeur qui a vendu le plus cher en ce mois-ci
+    # Grouper les ventes par vendeur, calculer le total par vendeur,
+    # et trier les résultats par total décroissant
+    # Sélectionner le premier résultat, c'est-à-dire le vendeur qui a vendu le plus cher
+    best = (
+        db.session.query(
+            Sale.seller,
+            func.sum(Sale.total).label("total_sales")
+        )
+        .filter(func.strftime('%Y', Sale.date) == str(year))
+        .filter(func.strftime('%m', Sale.date) == f"{month:02d}")
+        .group_by(Sale.seller)
+        .order_by(func.sum(Sale.total).desc())
+        .first()
+    )
+
+    if best:
+        return jsonify({"seller": best.seller, "total_sales": float(best.total_sales)})
+    else:
+        return jsonify({"message": "Aucune vente ce mois"})
+
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -442,7 +591,32 @@ def get_current_user():
         'role': user.role,
         'tokens_conseil': user.tokens_conseil,
         'dark_mode' : user.dark_mode,
+        'parent_id' : current_user.parent_id or current_user.id
     }})
+
+@app.route('/api/notifications/<int:id>', methods=['GET'])
+@login_required
+@admin_required
+def get_notif(id):
+    notifications = Notification.query.filter_by(admin_id=id).all()
+    notifications.reverse()
+    return jsonify([{
+        'id': n.id,
+        'title': n.title,
+        'message': n.message,
+        'sale_id': n.sale_id,
+        'is_read': n.is_read,
+        'created_at': n.created_at
+    } for n in notifications])
+
+@app.route('/api/notification/<int:id>', methods=['PUT'])
+@login_required
+@admin_required
+def read_notification(id):
+    notification = Notification.query.get_or_404(id)
+    notification.is_read = True
+    db.session.commit()
+    return jsonify({'message': 'Notification marquée comme lue'})
 
 @app.route('/api/settings', methods=['GET'])
 @login_required
@@ -560,12 +734,14 @@ def get_products():
     else:
         user_id = current_user.id
     products = Product.query.filter_by(user_id=user_id).all()
+    products.reverse()
     return jsonify([{
         'id': p.id,
         'sku': p.sku,
         'name': p.name,
         'price': p.price,
         'buy_price': p.buy_price,
+        'category': p.category,
         'stock': p.stock,
         'alert': p.alert,
         'imageUrl': p.image_url
@@ -579,6 +755,7 @@ def add_product():
     image = request.files.get('image')
     sku = request.form.get('sku')
     name = request.form.get('name')
+    category = request.form.get('category')
     price = request.form.get('price')
     buy_price = request.form.get('buy_price')
     stock = request.form.get('stock')
@@ -602,6 +779,7 @@ def add_product():
         user_id=user_id,
         sku=sku,
         name=name,
+        category=category,
         price=float(price),
         buy_price=float(buy_price),
         stock=int(stock),
@@ -616,11 +794,63 @@ def add_product():
         'id': product.id,
         'sku': product.sku,
         'name': product.name,
+        'category': product.category,
         'price': product.price,
         'buy_price': product.buy_price,
         'stock': product.stock,
         'imageUrl': product.image_url
     }), 201
+
+@app.route('/api/category', methods=['GET'])
+@login_required
+@admin_required
+def get_category():
+    try:
+        parent_id = current_user.parent_id or current_user.id
+        categories = Categories.query.filter_by(user_id=parent_id).all()
+        categories.reverse()
+
+        return jsonify([
+            {
+                'id': c.id,
+                'category': c.categorie,
+                'user_id': c.user_id
+            }
+            for c in categories
+        ])
+    except Exception as e:
+        print("Erreur Flask:", e)  # log dans la console
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/category', methods=['POST'])
+@login_required
+@admin_required
+def add_category():
+    parent_id = current_user.parent_id or current_user.id
+    data = request.get_json()
+    category = data.get('category') if data else None
+
+    if not category:
+        return jsonify({'error':'Le champ est vide'}), 400
+    
+    c = Categories(categorie=category, user_id=parent_id)
+    db.session.add(c)
+    db.session.commit()
+
+    return jsonify({
+        'message':'Catégorie ajoutée avec succès'
+    })
+
+@app.route('/api/category/<int:id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_category(id):
+    c = Categories.query.get_or_404(id)
+    db.session.delete(c)
+    db.session.commit()
+    return jsonify({
+        'message':'Catégorie supprimé avec succès'
+    })
 
 @app.route('/api/products/<int:id>', methods=['PUT'])
 @login_required
@@ -645,6 +875,7 @@ def update_product(id):
     name = request.form.get('name')
     price = request.form.get('price')
     buy_price = request.form.get('buy_price')
+    category = request.form.get('category')
     stock = request.form.get('stock')
     alert = request.form.get('alert')
 
@@ -658,6 +889,7 @@ def update_product(id):
     if buy_price: p.buy_price = float(buy_price)
     if stock: p.stock = int(stock)
     if alert: p.alert = int(alert)
+    if category: p.category = category
 
     if 'image' in request.files:
         image = request.files['image']
@@ -719,6 +951,27 @@ def record_sale():
         if product and product.stock >= item['qty']:
             product.stock -= item['qty']
     db.session.commit()
+
+    socketio.emit(
+        'Nouvelle vente',
+        {
+            'id': s.id,
+            'total': s.total,
+            'seller': s.seller,
+            'date': s.date.isoformat()
+        },
+        room=f"admin_{parent_id}")  # chaque admin a sa "room"
+
+    notification = Notification(
+        admin_id=parent_id,
+        title='Nouvelle vente',
+        message=f"Une nouvelle vente a été enregistrée : {s.id}",
+        sale_id=s.id,
+        is_read=False
+    )
+    db.session.add(notification)
+    db.session.commit()
+
     return jsonify({'message': 'Vente enregistrée'})
 
 @app.route('/api/sales', methods=['GET'])
@@ -738,6 +991,195 @@ def get_sales():
         'items': s.items,
         'seller': s.seller  # Ajout du nom du vendeur
     } for s in sales])
+
+@app.route('/api/prevision-moyenne', methods=['GET'])
+@login_required
+@admin_required
+def prevision_moyenne():
+    parent_id = current_user.parent_id or current_user.id
+    try:
+        # 1️⃣ Récupérer les ventes des 7 derniers jours pour l'utilisateur courant
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        ventes = Sale.query.filter(
+            Sale.date >= seven_days_ago,
+            Sale.parent_id == parent_id
+        ).all()
+
+        # 2️⃣ Transformer les ventes en liste de dictionnaires
+        data = []
+        for sale in ventes:
+            items = json.loads(sale.items)
+            for item in items:
+                data.append({
+                    "date": sale.date.strftime('%Y-%m-%d'),
+                    "sku": item.get("sku"),
+                    "qty": item.get("qty", 1)
+                })
+        if not data:
+            return jsonify({})  # aucun résultat
+
+        # 3️⃣ Agréger les ventes par jour et produit
+        stats = defaultdict(lambda: defaultdict(int))
+        for v in data:
+            day = datetime.strptime(v['date'], '%Y-%m-%d').day
+            stats[day][v['sku']] += v['qty']
+
+        # 4️⃣ Calculer la prévision simple par produit
+        totals = defaultdict(list)
+        for day, products in stats.items():
+            for sku, qty in products.items():
+                totals[sku].append(qty)
+
+        forecast = {sku: int(sum(qtys)/len(qtys)) for sku, qtys in totals.items()}
+        return jsonify(forecast)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/ventes-7-jours", methods=["GET"])
+@login_required
+@admin_required
+def ventes_7_dernieres():
+    parent_id = current_user.parent_id or current_user.id
+    results = (
+        db.session.query(
+            func.date(Sale.date).label("day"),
+            func.sum(Sale.total).label("ventes")
+        )
+        .filter(Sale.parent_id == parent_id)   # 🔹 filtre par utilisateur
+        .group_by(func.date(Sale.date))
+        .order_by(func.date(Sale.date).desc())
+        .limit(7)
+        .all()
+    )
+
+    # Remettre en ordre chronologique (ancien → récent)
+    results = results[::-1]
+
+    return jsonify([{"day": f'{r.day.split("-")[2]}-{r.day.split("-")[1]}', "ventes": float(r.ventes)} for r in results])
+
+@app.route('/api/weekly-sales', methods=['GET'])
+@login_required
+@admin_required
+def weekly_sales():
+    """
+    Retourne les ventes hebdomadaires de l'année courante pour l'utilisateur courant.
+    Les données sont retournées sous la forme d'une liste de dictionnaires, chaque dictionnaire contenant les clés 'day' (représentant la semaine) et 'ventes' (représentant le total de ventes).
+    Les données sont retournées pour les 5 semaines les plus récentes.
+    """
+    parent_id = current_user.parent_id or current_user.id
+
+    # Récupérer toutes les ventes depuis le début de l'année
+    start_year = date(date.today().year, 1, 1)
+    sales = (
+        db.session.query(Sale.date, Sale.total)
+        .filter(Sale.parent_id == parent_id, Sale.date >= start_year)
+        .all()
+    )
+
+    # Créer un dict pour stocker le total par semaine
+    weekly_totals = {}
+    weeks = get_weeks_of_year()
+
+    # Remplir le dictionnaire avec les semaines de l'année
+    for start_week, end_week in weeks:
+        week_label = f"{start_week.strftime('%d')} - {end_week.strftime('%d')}"
+        weekly_totals[week_label] = 0
+
+    # Ajouter les ventes dans la bonne semaine
+    for sale_date, total in sales:
+        for start_week, end_week in weeks:
+            if start_week <= sale_date.date() <= end_week:
+                week_label = f"{start_week.strftime('%d')} - {end_week.strftime('%d')}"
+                weekly_totals[week_label] += float(total)
+                break
+
+    # Transformer en liste pour JSON
+    result = [
+        {"day": week, "ventes": total} 
+        for week, total in weekly_totals.items()
+    ][-5:]  # Retourner les 5 semaines les plus récentes
+
+    return jsonify(result)
+
+@app.route('/api/monthly-sales', methods=['GET'])
+@login_required
+@admin_required
+def monthly_sales():
+    parent_id = current_user.parent_id or current_user.id
+
+    # Récupérer toutes les ventes depuis le début de l'année
+    start_year = date(date.today().year, 1, 1)
+    sales = (
+        db.session.query(Sale.date, Sale.total)
+        .filter(Sale.parent_id == parent_id, Sale.date >= start_year)
+        .all()
+    )
+
+    # Créer un dict pour stocker le total par mois
+    monthly_totals = {}
+    months = get_months_of_year()
+
+    for start_month, end_month in months:
+        month_label = start_month.strftime("%m %y")  # ex: "Août 2025"
+        monthly_totals[month_label] = 0
+
+    # Ajouter les ventes dans le bon mois
+    for sale_datetime, total in sales:
+        sale_date = sale_datetime.date()  # <-- conversion datetime -> date
+        for start_month, end_month in months:
+            if start_month <= sale_date <= end_month:
+                month_label = start_month.strftime("%m %y")
+                monthly_totals[month_label] += float(total)
+                break
+
+    # Transformer en liste pour JSON
+    result = [{"day": month, "ventes": total} for month, total in monthly_totals.items()][-7:]
+    return jsonify(result)
+
+@app.route("/api/annual-sales", methods=["GET"])
+@login_required
+@admin_required
+def annual_sales():
+    parent_id = current_user.parent_id or current_user.id
+
+    # Récupérer la première vente
+    first_sale = (
+        db.session.query(Sale.date)
+        .filter(Sale.parent_id == parent_id)
+        .order_by(Sale.date.asc())
+        .first()
+    )
+
+    if not first_sale:
+        return jsonify([])  # Pas de ventes
+
+    start_year = first_sale.date.year - 1
+    current_year = date.today().year
+
+    # Générer toutes les années entre la première vente et l'année actuelle
+    years = list(range(start_year, current_year + 1))
+
+    # Initialiser le total par année
+    annual_totals = {year: 0 for year in years}
+
+    # Récupérer toutes les ventes depuis la première vente
+    sales = (
+        db.session.query(Sale.date, Sale.total)
+        .filter(Sale.parent_id == parent_id, Sale.date >= first_sale.date)
+        .all()
+    )
+
+    # Calculer le total par année
+    for sale_datetime, total in sales:
+        year = sale_datetime.year
+        annual_totals[year] += float(total)
+
+    # Transformer en JSON
+    result = [{"day": str(year), "ventes": total} for year, total in annual_totals.items()]
+    return jsonify(result)
+
 
 @app.route('/api/facture', methods=['POST'])
 def generer_facture_pdf():
@@ -940,4 +1382,4 @@ def static_proxy(path):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True, host="0.0.0.0")
+    socketio.run(app, debug=True, host="0.0.0.0")

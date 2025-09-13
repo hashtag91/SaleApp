@@ -1,24 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { io } from "socket.io-client";
 import axios from 'axios';
 axios.defaults.withCredentials = true; // 🔐 envoie cookies sessions automatiquement
 import {
   FaShoppingCart,
   FaTrash,
   FaCheck,
-  FaEdit,
-  FaBox,
-  FaCreditCard,
   FaSearch,
-  FaChartBar,
   FaBars,
   FaSignOutAlt,
   FaUserCircle,
-  FaCog,
-  FaUser,
-  FaUsers,
-  FaInfo,
-  FaUserPlus,
-  FaWindowClose
+  FaBell,
 } from 'react-icons/fa';
 import {
   ResponsiveContainer,
@@ -41,10 +33,17 @@ import LoginForm from './composants_react/LoginForm';
 import MobileDrawOpen from './composants_react/MobileDrawOpen'
 import Switcher from './composants_react/Switcher'
 import ReactMarkdown from 'react-markdown';
-import SubUserEditForm from './composants_react/SubUserEditForm';
+import Dashboard from './composants_react/Dashboard';
 import AboutPage from './composants_react/About';
 import MenuLateral from './composants_react/MenuLateral';
-import SelectedProduct from './composants_react/SelectedProduct';
+import Categories from './composants_react/Categories';
+import Employees from './composants_react/Employees';
+import Stock from './composants_react/Stock';
+import ContactPage from './composants_react/ServiceClient';
+import SelectedSale from './composants_react/SelectedSale';
+import { motion, AnimatePresence } from "framer-motion";
+
+const socket = io("http://localhost:5000"); // ton backend Flask
 
 export default function App() {
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
@@ -66,24 +65,20 @@ export default function App() {
   const isValidPhone = (phone) => /^[0-9]{8,15}$/.test(phone);
   const isValidUsername = (username) => /^[a-zA-Z0-9_]{4,}$/.test(username);
   const isValidPassword = (password) => password.length >= 6;
-
-  const [employeesFormData, setEmployeesFormData] = useState({name: "", surname: "", username: "", password:"", phone: "", email: "", adresse: "", role:'autres'})
   const [openMenu, setOpenMenu] = useState(true);
   const [view, setView] = useState('pos');
   const [products, setProducts] = useState([]);
+  const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', alert: '', sku: '', category:'', image: null });
+  const [editProduct, setEditProduct] = useState(null);
+  const [productPage, setProductPage] = useState('products'); //Pour la navigation entre les pages de création, modification et affichage des produits
   const [cart, setCart] = useState([]);
   const [total, setTotal] = useState(0);
   const [sales, setSales] = useState([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [employeeForm, setEmployeeForm] = useState(false)
   const [settingsMe, setSettingsMe] = useState({name: "", surname: "", username: "", phone: "", email: "", entreprise: "", adresse: "", logo: null, role:''})
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: '', buy_price: '', stock: 0, alert: 5, image: null, category: ''});
-  const [showAddProduct, setShowAddProduct] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [editProduct, setEditProduct] = useState(null);
-  const [editedProduct, setEditedProduct] = useState({ name: '', price: '', buy_price: '', stock: '', alert: '', sku: '', image: null });
   const [stockFilter, setStockFilter] = useState('all');
   const [analyseMarkDown, setAnalyseMarkDown] = useState("");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -91,7 +86,6 @@ export default function App() {
   const [generateInvoice, setGenerateInvoice] = useState(false);
   const [isLoadingFacture, setIsLoadingFacture] = useState(false);
   const [clientName, setClientName] = useState('');
-  const [settingsSelectedMenu, setSettingsSelectedMenu] = useState('informations');
   const [showPasswordChange, setShowPasswordChange] = useState(false); // Constante pour afficher le formulaire de changement de mot de passe
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState(''); // Constante pour stocker le nouveau mot de passe
@@ -102,6 +96,12 @@ export default function App() {
   const [subUserId, setSubUserId] = useState(null);
   const [editedSubUserData, setEditedSubUserData] = useState({name: '',surname: '',username: '',phone: '',email: '',adresse: '',role: '', password: null});
   const [subUserToDelete, setSubUserToDelete] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [adminId, setAdminId] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [newNotificationsCount, setNewNotificationsCount] = useState(0);
+  const [openNotif, setOpenNotif] = useState(false);
+  const [selectedSale, setSelectedSale] = useState(null); // Utiliser pour stocker la vente choisie dans la notification
 
   const COLORS = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#14B8A6'];
 
@@ -114,6 +114,7 @@ export default function App() {
       setDarkMode(me.data.user.dark_mode)
       toast.success("Connexion réussie !");
       loadProducts();
+      loadCategories();
     } catch (error) {
       // On récupère le message d'erreur envoyé par Flask si dispo
       console.error(error);
@@ -151,27 +152,6 @@ export default function App() {
     }
   };
 
-  const employeesFormSubmit = async (e) => {
-    e.preventDefault();
-    const { name, surname, username, password, phone, email } = employeesFormData;
-    if (!isValidUsername(username)) return toast.error("Nom utilisateur invalide.");
-    if (!isValidPassword(password)) return toast.error("Mot de passe trop court.");
-    if (!isValidEmail(email)) return toast.error("Email invalide.");
-    if (!isValidPhone(phone)) return toast.error("Téléphone invalide.");
-
-    const formData = new FormData();
-    Object.entries(employeesFormData).forEach(([key, val]) => formData.append(key, val));
-
-    try {
-      await axios.post('/api/employees', formData);
-      toast.success("Utilisateur ajouté !");
-      setEmployeeForm(false);
-      loadSubUsers();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Erreur lors de l'ajout");
-    }
-  }
-
   const handleLogout = async () => {
     await axios.post('/api/logout');
     setUser(null);
@@ -183,6 +163,11 @@ export default function App() {
     const res = await axios.get('/api/products');
     setProducts(res.data);
   };
+
+  const loadCategories = async () => {
+    const res = await axios.get('/api/category');
+    setCategories(res.data);
+  }
 
   const loadSales = async () => {
     const res = await axios.get('/api/sales');
@@ -198,11 +183,37 @@ export default function App() {
           setDarkMode(res.data.user.dark_mode);
           loadProducts();
           loadSubUsers();
+          loadCategories();
         } else {
           handleLogout();
         }
       })
   }, []);
+
+  const loadNotifications = async () => {
+    const res = await axios.get(`/api/notifications/${user.id}`);
+    setNotifications(res.data);
+    const newNotifications = res.data.filter(n => !n.is_read);
+    setNewNotificationsCount(newNotifications.length);
+  }
+
+  useEffect(() => {
+    if (user && user.role === "admin") {
+      socket.emit("join_admin", { admin_id: user.id }); //Joindre la session admin et joindre sa room
+    }
+
+    socket.on("Nouvelle vente", (data) => {
+      toast.success(`Nouvelle vente de ${data.seller} - Total: ${data.total} FCFA`);
+      loadNotifications();
+    });
+
+    if (user && user.role === "admin") {
+      loadNotifications();
+    }
+    return () => {
+      socket.off("Nouvelle vente");
+    };
+  }, [adminId, user]);
 
   const settingsRetrieve = () => {
     axios.get('/api/settings').then(res => {
@@ -291,8 +302,15 @@ export default function App() {
 
   useEffect(() => {
     if (user){
+      setView (user.role === 'admin' ? 'dashboard' :'pos');
       loadProducts();
       loadSubUsers();
+      loadCategories();
+      loadSales();
+      if (user.role === 'admin') {
+        setAdminId(user.id);
+        loadNotifications();
+      }
     };
   }, []);
 
@@ -302,6 +320,10 @@ export default function App() {
   }, [cart]);
 
   const addToCart = (product) => {
+    if (product.stock <= 0) {
+      toast.error('Stock insuffisant !');
+      return
+    }
     setCart(prev => {
       const found = prev.find(p => p.id === product.id);
       if (found) {
@@ -364,117 +386,13 @@ export default function App() {
       setCart([]);
       setGenerateInvoice(false);
       loadProducts();
+      loadNotifications();
     } catch (err) {
       console.error("Erreur checkout:", err);
       toast.error("Erreur pendant la vente");
     } finally {
       setIsLoadingCheckout(false);
     }
-  };
-
-  const handleAddProduct = () => {
-    setShowAddProduct(true);
-  };
-
-  const handleProductChange = (e) => {
-    const { name, value, files } = e.target;
-    if (name === 'image') {
-      setNewProduct(prev => ({ ...prev, image: files[0] }));
-    } else {
-      setNewProduct(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const submitNewProduct = async (e) => {
-    e.preventDefault();
-
-    const { name, sku, price, stock, alert } = newProduct;
-    if (!name || !sku || !price || !stock) return toast.warning("Tous les champs sont requis.");
-    if (isNaN(price) || price <= 0) return toast.warning("Prix invalide");
-    if (isNaN(stock) || stock < 0) return toast.warning("Stock invalide");
-    if (isNaN(alert) || stock < 0) return toast.warning("Stock alert invalide");
-
-    const formData = new FormData();
-    Object.entries(newProduct).forEach(([key, val]) => {
-      if (val !== null && val !== undefined) {
-        // Convertir booléens en chaîne pour Flask
-        if (typeof val === 'boolean') {
-          formData.append(key, val ? 'true' : 'false');
-        } else {
-          formData.append(key, val);
-        }
-      }
-    });
-
-    await axios.post('/api/products', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-
-    toast.success('Produit ajouté');
-    setShowAddProduct(false);
-    setNewProduct({ name: '', sku: '', price: '', buy_price: '', stock: 0, alert: 0, image: null,  });
-    loadProducts();
-  };
-
-  const handleEditProduct = (product) => {
-    setEditProduct(product.id);
-    setEditedProduct({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      buy_price: product.buy_price,
-      stock: product.stock,
-      alert: product.alert,
-      sku: product.sku || '',
-      image: null,
-    });
-  };
-
-  const handleEditChange = (e) => {
-    const { name, value, files } = e.target;
-    if (name === 'image') {
-      setEditedProduct((prev) => ({ ...prev, image: files[0] }));
-    } else {
-      setEditedProduct((prev) => ({ ...prev, [name]: value }));
-    }
-  };
-
-  async function submitEditProduct(e) {
-    e.preventDefault();
-
-    const { name, sku, price, stock, buy_price} = editedProduct;
-    if (!name || !sku || !price || !stock || !buy_price) return toast.warning("Champs manquants.");
-    if (isNaN(price) || price <= 0) return toast.warning("Prix invalide");
-    if (isNaN(stock) || stock <= 0) return toast.warning("Quantité invalide");
-
-    const formData = new FormData();
-    Object.entries(editedProduct).forEach(([key, val]) => {
-      if (key === 'image' && val instanceof File) formData.append(key, val);
-      else if (key !== 'id') formData.append(key, val);
-    });
-
-    try {
-      const response = await fetch(`/api/products/${editedProduct.id}`, {
-        method: 'PUT',
-        body: formData,
-      });
-      if (!response.ok) throw new Error('Erreur lors de la modification');
-
-      const updatedProduct = await response.json();
-      setProducts(products.map(p => p.id === updatedProduct.id ? updatedProduct : p));
-      setEditProduct(null);
-      loadProducts();
-      toast.success(updatedProduct.message || "Produit modifié avec succès !");
-      setView('admin')
-    } catch (error) {
-      toast.error(error.message);
-    }
-  }
-
-  const handleDeleteProduct = async (id) => {
-    if (!window.confirm('Supprimer ce produit ?')) return;
-    await axios.delete(`/api/products/${id}`);
-    loadProducts();
   };
 
   const downloadCSV = async () => {
@@ -487,16 +405,24 @@ export default function App() {
     link.click();
   };
 
+  const posProducts = products.filter((p) => p.stock > 0);
+
   const filteredProducts = products.filter((p) => {
     const matchSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchStock =
-      stockFilter === 'all' ? true :
-      stockFilter === 'rupture' ? p.stock === 0 :
-      stockFilter === 'low' ? p.stock <= p.alert:
-      stockFilter === 'ok' ? p.stock > p.alert : true;
+      let matchStock = true;
+
+      if (stockFilter === 'rupture') {
+        matchStock = p.stock === 0;
+      } else if (stockFilter === 'low') {
+        matchStock = p.stock <= p.alert && p.stock > 0;
+      } else if (stockFilter === 'ok') {
+        matchStock = p.stock > p.alert;
+      } else if (stockFilter !== 'all') {
+        matchStock = p.category === stockFilter;
+      }
 
     return matchSearch && matchStock;
   });
@@ -515,7 +441,7 @@ export default function App() {
   sales.forEach(s => {
     const items = JSON.parse(s.items);
     items.forEach(i => {
-      const label = i.sku ? `${i.sku} - ${i.name}` : i.name;
+      const label = i.sku ? i.sku : i.name;
       productCount[label] = (productCount[label] || 0) + i.qty;
     });
   });
@@ -559,10 +485,6 @@ export default function App() {
   });
 
   const comparisonData = Object.entries(dailyTotals).map(([date, val]) => ({ date, ...val }));
-
-  const ruptureStock = products.filter(p => p.stock === 0).length;
-  const stockFaible = products.filter(p => p.stock > 0 && p.stock <= 2).length;
-  const stockOk = products.filter(p => p.stock > 2).length;
 
   const [loadingAI, setLoadingAI] = useState(false);
 
@@ -627,6 +549,19 @@ export default function App() {
       toast.error(err.response?.data?.error || "Erreur lors de la suppression");
     }
   };
+
+  const notif_read = async (id) => {
+    await axios.put(`/api/notification/${id}`);
+    loadNotifications();
+    if (notifications.filter(n => n.id === id)[0].title === 'Nouvelle vente') {
+      loadSales();
+      const saleId = notifications.filter(n => n.id === id)[0].sale_id;
+      const sale = sales.filter(s => s.id === saleId)[0];
+      setSelectedSale(sale);
+      setView('showSale');
+    }
+    setOpenNotif(!openNotif);
+  }
 
   if (!user){
     return(
@@ -696,7 +631,7 @@ export default function App() {
   return (
     <div className={`${darkMode ? 'bg-slate-800' : 'bg-gray-50'} flex flex-col h-screen mx-auto `}>
       <div
-        className={`sticky top-0 p-4 w-full flex justify-between items-center z-40 shadow rounded h-16 ${darkMode ? 'bg-slate-700' : 'bg-white'}`}
+        className={`sticky top-0 p-4 w-full flex justify-between items-center z-50 shadow rounded h-16 ${darkMode ? 'bg-slate-700' : 'bg-white'}`}
       >
         <div className='flex gap-2'>
           <button
@@ -721,13 +656,59 @@ export default function App() {
             {user?.name} {user?.surname}
           </span>
 
-          <button
-            onClick={() => { setView('settings'); setShowSettings(true); settingsRetrieve(); }}
-            className="hidden sm:inline-flex"
-            type="button"
-          >
-            <FaCog className={`text-2xl ${darkMode ? 'text-gray-200' : 'text-gray-700'}`} />
-          </button>
+          {user.role === 'admin' && (
+            <div className="relative">
+              {/* Bouton cloche */}
+              <button
+                onClick={() => {setOpenNotif(!openNotif); loadSales();}}
+                className="relative flex items-center"
+              >
+                {newNotificationsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow">
+                    {newNotificationsCount > 9 ? "9+" : newNotificationsCount}
+                  </span>
+                )}
+                <FaBell className={`w-6 h-6 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`} />
+              </button>
+
+              {/* Panel notifications */}
+              {openNotif && (
+                <div
+                  className={`absolute right-0 mt-2 w-72 max-h-80 overflow-y-auto rounded-lg shadow-lg z-50 p-4 ${
+                    darkMode ? 'bg-slate-800 text-gray-100' : 'bg-white text-gray-800'
+                  }`}
+                >
+                  <h3 className="font-semibold mb-2">Notifications</h3>
+
+                  {notifications.length === 0 ? (
+                    <p className="text-sm text-gray-400">Aucune notification</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {notifications.map((notif, idx) => (
+                        <li
+                          key={idx}
+                          className={`relative p-2 rounded-lg border cursor-pointer ${
+                            darkMode
+                              ? 'border-slate-600 hover:bg-slate-700'
+                              : 'border-gray-200 hover:bg-gray-100'
+                          }`}
+                          onClick={() => notif_read(notif.id)}
+                        >
+                          {notif.is_read === false && (
+                            <span className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full"></span>
+                          )}
+                          <p className="text-sm">{notif.message}</p>
+                          <span className="text-xs text-gray-400">
+                            {new Date(notif.created_at).toLocaleString()}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <button
             onClick={() => setMobileDrawerOpen(true)}
@@ -745,8 +726,8 @@ export default function App() {
         </div>
       </div>
 
-      <div className='flex flex-1 overflow-hidden'>
-        <MenuLateral user={user} setView={setView} view={view} loadProducts={loadProducts} loadingAI={loadingAI} loadSales={loadSales} openMenu1={openMenu}/>
+      <div className='flex flex-1 overflow-y-auto'>
+        <MenuLateral user={user} setView={setView} view={view} loadProducts={loadProducts} loadingAI={loadingAI} loadSales={loadSales} openMenu1={openMenu} settingsRetrieve={settingsRetrieve}/>
         <div className='flex-1 overflow-y-auto py-2 px-3'>
           {/* Le menu sur mobile */}
           {/*  */}
@@ -754,8 +735,8 @@ export default function App() {
             <MobileDrawOpen setMobileDrawerOpen={setMobileDrawerOpen} setView={setView} loadProducts={loadProducts} loadSales={loadSales} loadingAI={loadingAI} setShowSettings={setShowSettings} settingsRetrieve={settingsRetrieve} handleLogout={handleLogout} user={user} darkMode={darkMode} view={view}/>
           )}
 
-          {['pos', 'admin'].includes(view) && (
-            <div className="sticky mb-6 max-w-md mx-auto flex items-center gap-3 border border-gray-300 rounded px-3 py-2 bg-white">
+          {['pos'].includes(view) && (
+            <div className="sticky top-0 mb-6 max-w-md mx-auto flex items-center gap-3 border border-gray-300 rounded px-3 py-2 bg-white z-10">
               <FaSearch className="text-gray-500" />
               <input
                 type="text"
@@ -766,14 +747,17 @@ export default function App() {
               />
             </div>
           )}
-
+          {view === 'dashboard' && (
+            <Dashboard sales={sales} loadSales={loadSales} products={products} darkMode={darkMode} setEditedProduct={setEditedProduct}
+              setEditProduct={setEditProduct} setProductPage={setProductPage} setView={setView}/>
+          )}
           {view === 'pos' && (
             <div className="flex flex-col lg:flex-row gap-6 w-full px-5">
-              <div className="flex-1">
+              <div className="flex-1 h-screen">
                 <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Produits</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredProducts.map((p) => (
-                    p.stock >= 0 && (
+                <div className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {posProducts.map((p) => (
+                    p.stock > 0 ? (
                       <button key={p.id} onClick={() => addToCart(p)} className={`text-white rounded-xl shadow-lg flex flex-col ${darkMode ? 'bg-slate-400':''}`} style={{ minHeight: '120px' }}>
                         {p.imageUrl && (
                           <div className="p-1 flex items-center justify-center bg-white rounded-xl w-full h-full">
@@ -783,19 +767,16 @@ export default function App() {
                         <div className="w-full p-3 flex flex-col justify-center space-y-1 text-left">
                           <span className={`font-semibold text-gray-700 truncate ${darkMode ? 'text-white':''}`}>{p.name}</span>
                           <span className={`text-xs text-gray-500 ${darkMode ? 'text-white':''}`}>SKU: {p.sku}</span>
-                          <div className='flex justify-between'>
-                            <span className={`text-sm text-gray-500 ${darkMode ? 'text-white':''}`}>Stock: <span className='font-bold'>{p.stock}</span></span>
-                            <span className={`font-bold text-sm text-gray-700 ${darkMode ? 'text-white' : ''}`}>FCFA {p.price.toFixed(0)}</span>
-                          </div>
-                          
+                          <span className={`text-sm text-gray-500 ${darkMode ? 'text-white':''}`}>Stock: <span className='font-bold'>{p.stock}</span></span>
+                          <span className={`font-bold text-sm text-red-700 ${darkMode ? 'text-red-500' : ''}`}>FCFA {p.price.toFixed(0)}</span>
                         </div>
                       </button>
-                    )
+                    ) :''
                   ))}
                 </div>
               </div>
 
-              <div className="hidden sm:block" style={{ width: '25vw', minWidth: '280px' }}>
+              <div className="w-[20vw] min-w-[280px] hidden sm:block sticky top-0 h-screen">
                 <h2 className={`text-xl font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : ''}`}>
                   <FaShoppingCart /> Panier
                 </h2>
@@ -842,363 +823,29 @@ export default function App() {
                   )}
                 </div>
 
-                <button onClick={checkout} className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2">
+                <button onClick={checkout} className="mt-4 w-full p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2">
                   <FaCheck /> Valider la vente
                 </button>
               </div>
+              <ToastContainer/>
             </div>
           )}
 
           {view === 'admin' && (
-            <div className='p-4'>
-              <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Stock</h2>
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-                {user.role === 'admin' &&
-                  <button onClick={() => setShowAddProduct(true)} className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
-                    Ajouter un produit
-                  </button>
-                }
-                <select
-                  value={stockFilter}
-                  onChange={e => setStockFilter(e.target.value)}
-                  className="border border-gray-300 px-3 py-2 rounded text-sm"
-                >
-                  <option value="all">📦 Tous les produits</option>
-                  <option value="rupture">🔴 Rupture de stock</option>
-                  <option value="low">🟡 Stock faible (1–2)</option>
-                  <option value="ok">⚪ Stock suffisant</option>
-                </select>
-
-                <div className="flex gap-3 text-sm font-medium">
-                  <span className="flex items-center gap-1 text-red-700">
-                    <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
-                    Rupture ({ruptureStock})
-                  </span>
-                  <span className="flex items-center gap-1 text-yellow-700">
-                    <span className="w-3 h-3 rounded-full bg-yellow-400 inline-block"></span>
-                    Faible ({stockFaible})
-                  </span>
-                  <span className={`flex items-center gap-1 text-gray-700 ${darkMode ? 'text-white' : ''}`}>
-                    <span className="w-3 h-3 rounded-full bg-gray-300 inline-block"></span>
-                    OK ({stockOk})
-                  </span>
-                </div>
-              </div>
-
-              {showAddProduct && (
-                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-                  <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative overflow-y-auto max-h-full">
-                    <button
-                      onClick={() => setShowAddProduct(false)}
-                      className="absolute top-2 right-2 text-gray-500 hover:text-black"
-                    >
-                      ✕
-                    </button>
-
-                    <h3 className="text-xl font-semibold mb-4">Ajouter un produit</h3>
-
-                    <form onSubmit={submitNewProduct} className="w-full border p-4 sm:p-6 rounded-xl bg-white shadow">
-                      <div className="mb-4">
-                        <label className="block mb-1 font-medium text-gray-700">Nom <span className='text-red-900'>*</span></label>
-                        <input type="text" name="name" value={newProduct.name} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-4">
-                        <div className='flex'>
-                          <label className="block mb-1 font-medium text-gray-700 mr-2">SKU</label>
-                          <div class="relative">
-                            <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
-                              ?
-                            </span>
-                            <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
-                              SKU est le numéro d'identifiant unique que vous attribuez à un produit dans le stock pour faciliter son identification.
-                            </div>
-                          </div>
-                        </div>
-                        <input type="text" name="sku" value={newProduct.sku} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div>
-                        
-                      </div>
-                      <div className="mb-4">
-                        <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
-                        <input type="number" name="price" step="0.01" value={newProduct.price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-4">
-                        <label htmlFor="" className="bloc mb-1 font-medium text-gray-700">Prix d'achat (FCFA) <span className='text-red-900'>*</span></label>
-                        <input type="number" name="buy_price" value={newProduct.buy_price} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2" required/>
-                      </div>
-                      <div className="mb-4">
-                        <label className="block mb-1 font-medium text-gray-700">Quantité <span className='text-red-900'>*</span></label>
-                        <input type="number" name="stock" value={newProduct.stock} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-4">
-                        <div className='flex'>
-                          <label className="block mb-1 font-medium text-gray-700 mr-2">Stock d'alert</label>
-                          <div class="relative">
-                            <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
-                              ?
-                            </span>
-                            <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
-                              Le stock d'alert est la quantité à partir de laquelle l'application fera un rappel de réapprovisionnement
-                            </div>
-                          </div>
-                        </div>
-                        <input type="number" name="alert" value={newProduct.alert} onChange={handleProductChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-6">
-                        <label className="block mb-1 font-medium text-gray-700">Image</label>
-                        <input type="file" name="image" accept="image/*" onChange={handleProductChange} className="w-full" />
-                      </div>
-                      <div className="flex gap-3">
-                        <button type="submit" className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition">
-                          Ajouter le produit
-                        </button>
-                        <button type="button" onClick={() => setShowAddProduct(false)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
-                          Annuler
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-              {(editProduct && (view !== 'viewProduct')) && (
-                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-                  <div className="bg-white p-6 rounded shadow-lg w-full max-w-lg relative">
-                    <button
-                      onClick={() => setEditProduct(null)}
-                      className="absolute top-2 right-2 text-gray-500 hover:text-black"
-                    >
-                      ✕
-                    </button>
-
-                    <h3 className="text-xl font-semibold mb-3">Modifier le produit</h3>
-                    <form onSubmit={submitEditProduct} className="mb-4 border p-6 rounded-xl max-w-md bg-white shadow">
-                      <div className="mb-2">
-                        <label className="block mb-1 font-medium text-gray-700">Nom <span className='text-red-900'>*</span></label>
-                        <input type="text" name="name" value={editedProduct.name} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-2">
-                        <div className='flex'>
-                          <label className="block mb-1 font-medium text-gray-700 mr-2">SKU</label>
-                          <div class="relative">
-                            <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
-                              ?
-                            </span>
-                            <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
-                              SKU est le numéro d'identifiant unique que vous attribuez à un produit dans le stock pour faciliter son identification.
-                            </div>
-                          </div>
-                        </div>
-                        <input type="text" name="sku" value={editedProduct.sku} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-2">
-                        <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
-                        <input type="number" name="price" step="0.01" value={editedProduct.price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-2">
-                        <label className="block mb-1 font-medium text-gray-700">Prix d'achat (FCFA) <span className='text-red-900'>*</span></label>
-                        <input type="number" name="buy_price" step="0.01" value={editedProduct.buy_price} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-2">
-                        <label className="block mb-1 font-medium text-gray-700">Quantité <span className='text-red-900'>*</span></label>
-                        <input type="number" name="stock" value={editedProduct.stock} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-2">
-                        <div className='flex'>
-                          <label className="block mb-1 font-medium text-gray-700 mr-2">Stock d'alert</label>
-                          <div class="relative">
-                            <span class="w-5 h-5 flex items-center justify-center bg-gray-300 text-gray-700 rounded-full text-xs cursor-pointer hover:opacity-100 peer">
-                              ?
-                            </span>
-                            <div class="absolute left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg opacity-0 peer-hover:opacity-100 transition-opacity">
-                              Le stock d'alert est la quantité à partir de laquelle l'application fera un rappel de réapprovisionnement
-                            </div>
-                          </div>
-                        </div>
-                        <input type="number" name="alert" value={editedProduct.alert} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
-                      </div>
-                      <div className="mb-4">
-                        <label className="block mb-1 font-medium text-gray-700">Image (optionnelle)</label>
-                        <input type="file" name="image" accept="image/*" onChange={handleEditChange} className="w-full" />
-                      </div>
-                      <div className="flex gap-3">
-                        <button type="submit" className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 transition">
-                          Enregistrer les modifications
-                        </button>
-                        <button type="button" onClick={() => setEditProduct(null)} className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg font-semibold hover:bg-gray-500 transition">
-                          Annuler
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-                
-              )}
-              <table 
-                className={`hidden sm:table min-w-full border border-gray-300 rounded-lg overflow-x-scroll 
-                  ${darkMode ? "text-white border-gray-700" : ""}`}
-              >
-                <thead className={`${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-                  <tr>
-                    {["Image", "Nom", "SKU", "Prix d'achat", "Prix de vente", "Quantité", "Qty Alert", "Statut", "Actions"].map((head) => (
-                      <th
-                        key={head}
-                        className={`px-6 py-3 text-left uppercase text-xs font-semibold tracking-wide
-                          ${darkMode 
-                            ? "text-gray-200 border-b border-gray-700" 
-                            : "text-gray-700 border-b border-gray-300"}`
-                        }
-                      >
-                        {head}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredProducts.map((p) => (
-                    <tr
-                      key={p.sku}
-                      className={`transition-colors ${
-                        darkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"
-                      }`}
-                    >
-                      {/* Image */}
-                      <td className={`px-6 py-4 text-sm border-b ${darkMode ? "border-gray-700" : "border-gray-300"}`}>
-                        <img 
-                          src={p.imageUrl || "/placeholder.png"} 
-                          width={40} height={40} 
-                          className="rounded object-cover" 
-                          alt={p.name} 
-                        />
-                      </td>
-
-                      {/* Infos produit */}
-                      <td className="px-6 py-4 text-sm font-bold border-b">{p.name}</td>
-                      <td className="px-6 py-4 text-sm border-b">{p.sku}</td>
-
-                      {/* Prix */}
-                      <td className="px-6 py-4 text-sm border-b">{p.buy_price} FCFA</td>
-                      <td className="px-6 py-4 text-sm border-b">{p.price} FCFA</td>
-
-                      {/* Stock */}
-                      <td className="px-6 py-4 text-sm border-b">{p.stock}</td>
-                      <td className="px-6 py-4 text-sm border-b">{p.alert}</td>
-
-                      {/* Statut */}
-                      <td className="px-6 py-4 text-sm border-b">
-                        {p.stock === 0 ? (
-                          <span className="inline-block px-2 py-1 text-xs font-semibold text-white bg-red-600 rounded">
-                            Épuisé
-                          </span>
-                        ) : p.stock <= p.alert ? (
-                          <span className="inline-block px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-300 rounded">
-                            Stock bas
-                          </span>
-                        ) : (
-                          <span className="inline-block px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded">
-                            En stock
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className={`px-6 py-4 text-sm border-b min-w-[100px]`}>
-                        <div className="flex items-center gap-2">
-                          <button 
-                            className="p-2 bg-blue-500 rounded-lg hover:bg-blue-600 shadow-sm" 
-                            onClick={() => handleEditProduct(p)}
-                          >
-                            <FaEdit className="text-white" />
-                          </button>
-                          <button 
-                            className="p-2 bg-red-500 rounded-lg hover:bg-red-600 shadow-sm" 
-                            onClick={() => handleDeleteProduct(p.id)}
-                          >
-                            <FaTrash className="text-white" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <div className="flex flex-col sm:hidden flex-1 gap-3">
-                {filteredProducts.map((p) => (
-                  <div
-                    key={p.sku}
-                    className={`p-3 rounded-xl shadow-md transition-all duration-200 ${darkMode ? 'bg-slate-700' :''}`}
-                    onClick={() => {setView('viewProduct'),handleEditProduct(p)}}
-                  >
-                    <div className="flex items-center gap-3">
-                      {p.imageUrl ? (
-                        <img
-                          src={p.imageUrl}
-                          alt={p.name}
-                          className="w-14 h-14 rounded-lg object-cover border border-gray-200"
-                        />
-                      ) : (
-                        <div className="w-14 h-14 flex items-center justify-center bg-gray-300 text-xs text-gray-700 rounded-lg">
-                          Pas d'image
-                        </div>
-                      )}
-
-                      <div className="flex-1">
-                        <h3
-                          className={`font-semibold text-sm text-gray-800 ${darkMode ? 'text-white/80' :''}`}
-                        >
-                          {p.name}
-                        </h3>
-                        <p className="text-xs text-gray-500">Sku: {p.sku}</p>
-
-                        <div className="mt-1 flex justify-between items-center text-sm">
-                          <p className="font-bold">Qté: {p.stock}</p>
-                          <p className={`font-bold ${darkMode ? 'text-white/80' :''}`}>{p.price} FCFA</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Badge dynamique de stock */}
-                    <div className="mt-2">
-                      {p.stock === 0 ? (
-                        <span className="inline-block px-2 py-1 text-xs font-semibold text-white bg-red-700 rounded">
-                          Épuisé
-                        </span>
-                      ) : p.stock <= p.alert ? (
-                        <span className="inline-block px-2 py-1 text-xs font-semibold text-black bg-yellow-300 rounded">
-                          Stock bas
-                        </span>
-                      ) : (
-                        <span className="inline-block px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded">
-                          En stock
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {view === 'viewProduct' && (
-            <SelectedProduct 
-              darkMode={darkMode} 
-              editedProduct={editedProduct} 
-              setEditProduct={setEditProduct} 
-              handleEditChange={handleEditChange} 
-              submitEditProduct={submitEditProduct} 
-              setView={setView}
-              loadProducts={loadProducts}
-              editProduct={editProduct}/>
+            <Stock darkMode={darkMode} user={user} products={products} stockFilter={stockFilter}
+              setStockFilter={setStockFilter} categories={categories} filteredProducts={filteredProducts}
+              loadProducts={loadProducts} setProducts={setProducts} searchTerm={searchTerm} setSearchTerm={setSearchTerm}
+              editedProduct={editedProduct} setEditedProduct={setEditedProduct} editProduct={editProduct} setEditProduct={setEditProduct}
+              productPage={productPage} setProductPage={setProductPage}
+            />
           )}
 
           {view === 'sales' && (
             <div className="p-4">
-              <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>🧾 Historique des ventes</h2>
+              <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Historique des ventes</h2>
 
               {/* Filtres et export */}
-              <div className="flex flex-wrap gap-3 mb-6">
+              <div className="sticky top-0 flex flex-wrap gap-3 mb-6">
                 <input
                   type="date"
                   value={startDate}
@@ -1213,14 +860,14 @@ export default function App() {
                 />
                 <button
                   onClick={downloadCSV}
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+                  className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                 >
-                  📥 Exporter CSV
+                  Exporter CSV
                 </button>
               </div>
 
               {/* Liste des ventes */}
-              <div className="max-h-[600px] overflow-auto space-y-6">
+              <div className="flex-1 overflow-auto space-y-6 flex-1 flex-col">
                 {sales.map((s) => {
                   // Si s.items est un JSON stringifié
                   let items = [];
@@ -1298,380 +945,124 @@ export default function App() {
                   );
                 })}
               </div>
+              <ToastContainer/>
             </div>
           )}
           {view === 'charts' && (
-            <div className="p-6 space-y-8">
+            <div className="p-4 sm:p-6 space-y-8">
               {/* Titre */}
-              <h2 className={`text-3xl font-extrabold mb-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                📊 Statistiques des Ventes
+              <h2
+                className={`text-xl sm:text-2xl font-extrabold mb-2 sm:mb-4 ${
+                  darkMode ? "text-white" : "text-gray-800"
+                }`}
+              >
+                Statistiques des Ventes
               </h2>
-
-              {/* BarChart */}
-              <div
-                className={`mx-auto rounded-2xl p-6 shadow-xl transition-colors duration-300
-                  ${darkMode 
-                    ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-gray-700' 
-                    : 'bg-white border border-gray-200'}`}
-              >
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={comparisonData}>
-                    <CartesianGrid strokeDasharray="4 4" stroke={darkMode ? '#4b5563' : '#e5e7eb'} />
-                    <XAxis dataKey="date" stroke={darkMode ? '#d1d5db' : '#374151'} />
-                    <YAxis tickFormatter={(v) => `FCFA ${v}`} stroke={darkMode ? '#d1d5db' : '#374151'} />
-                    <Tooltip formatter={(v) => `FCFA ${v}`} />
-                    <Legend />
-                    <Bar dataKey="vente" fill="#4F46E5" radius={[8, 8, 0, 0]} />
-                    <Bar dataKey="achat" fill="#F97316" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+            
+              {/* Grille responsive */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* BarChart */}
+                <div
+                  className={`rounded-2xl p-4 sm:p-6 shadow-lg transition-colors duration-300 
+                    ${darkMode 
+                      ? "bg-gradient-to-br from-slate-800 to-slate-900 border border-gray-700" 
+                      : "bg-white border border-gray-200"}`}
+                >
+                  <h3
+                    className={`text-lg font-semibold mb-4 ${
+                      darkMode ? "text-gray-100" : "text-gray-700"
+                    }`}
+                  >
+                    Comparaison Achats vs Ventes
+                  </h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={comparisonData}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke={darkMode ? "#4b5563" : "#e5e7eb"}
+                      />
+                      <XAxis
+                        dataKey="date"
+                        stroke={darkMode ? "#d1d5db" : "#374151"}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        tickFormatter={(v) => `FCFA ${v}`}
+                        stroke={darkMode ? "#d1d5db" : "#374151"}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip formatter={(v) => `FCFA ${v}`} />
+                      <Legend />
+                      <Bar dataKey="vente" fill="#4F46E5" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="achat" fill="#F97316" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+            
+                {/* PieChart */}
+                <div
+                  className={`rounded-2xl p-4 sm:p-6 shadow-lg transition-colors duration-300 
+                    ${darkMode 
+                      ? "bg-gradient-to-br from-slate-800 to-slate-900 border border-gray-700" 
+                      : "bg-white border border-gray-200"}`}
+                >
+                  <h3
+                    className={`text-lg font-semibold mb-4 ${
+                      darkMode ? "text-gray-100" : "text-gray-700"
+                    }`}
+                  >
+                    Produits les plus vendus
+                  </h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={productChartData.slice(-5)}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius="80%"
+                        label={({ name, percent }) =>
+                          `${name} ${(percent * 100).toFixed(0)}%`
+                        }
+                        isAnimationActive
+                      >
+                        {productChartData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={COLORS[index % COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v, n) => [`${v} FCFA`, n]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-
-              {/* PieChart */}
-              <div
-                className={`mx-auto rounded-2xl p-6 shadow-xl transition-colors duration-300
-                  ${darkMode 
-                    ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-gray-700' 
-                    : 'bg-white border border-gray-200'}`}
-              >
-                <h3 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                  Produits les plus vendus
-                </h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={productChartData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={110}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      isAnimationActive={true}
-                    >
-                      {productChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value, name) => [`${value} FCFA`, name]} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
+            
+              <ToastContainer />
+            </div>          
           )}
           {view === 'profil' && (
             <div className="flex-grow relative">
-              <h2 className={`text-center font-2xl font-bold mb-2 ${darkMode ? 'text-white' : ''}`}>Mon profil</h2>
+              <h2 className={`text-2xl font-bold mb-4 text-gray-800 ${darkMode ? 'text-white' : ''}`}>Mon profil</h2>
               <div className="flex flex-grow flex pb-20">
                 <div className="flex-grow flex justify-center items-center">
-                  {settingsSelectedMenu === 'informations' && (
-                    <form
-                      onSubmit={showPasswordChange ? handlePasswordReset : settingsSubmit}
-                      className={`p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1 transition-colors duration-300
-                        ${darkMode ? 'bg-slate-800 text-gray-100 border border-gray-100' : 'bg-white text-gray-800'}`}
-                    >
-                      <h2 className="text-center font-bold">{showPasswordChange ? 'Changer le mot de passe' : 'Mes informations'}</h2>
-                      {!showPasswordChange && (
-                        <>
-                          {/* Nom */}
-                          <div>
-                            <label
-                              htmlFor="name"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Nom <span className='text-red-800'>*</span>
-                            </label>
-                            <input
-                              type="text"
-                              name="name"
-                              id="name"
-                              placeholder="Nom"
-                              required
-                              onChange={handleSettingsFieldChange}
-                              value={settingsMe.name}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                            />
-                          </div>
-
-                          {/* Prénom */}
-                          <div>
-                            <label
-                              htmlFor="surname"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Prénom <span className='text-red-800'>*</span>
-                            </label>
-                            <input
-                              type="text"
-                              name="surname"
-                              id="surname"
-                              placeholder="Prénom"
-                              required
-                              onChange={handleSettingsFieldChange}
-                              value={settingsMe.surname}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                            />
-                          </div>
-
-                          {/* Entreprise */}
-                          <div>
-                            <label
-                              htmlFor="entreprise"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Entreprise
-                            </label>
-                            <input
-                              type="text"
-                              name="entreprise"
-                              id="entreprise"
-                              placeholder="Nom de l'entreprise"
-                              disabled={user.role !== 'admin'}
-                              onChange={handleSettingsFieldChange}
-                              value={settingsMe.entreprise}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                            />
-                          </div>
-
-                          {/* Adresse */}
-                          <div>
-                            <label
-                              htmlFor="adresse"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Adresse
-                            </label>
-                            <input
-                              type="text"
-                              name="adresse"
-                              id="adresse"
-                              placeholder="Adresse de l'entreprise"
-                              onChange={handleSettingsFieldChange}
-                              value={settingsMe.adresse}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                            />
-                          </div>
-
-                          {/* Téléphone */}
-                          <div>
-                            <label
-                              htmlFor="phone"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Téléphone
-                            </label>
-                            <input
-                              type="text"
-                              name="phone"
-                              id="phone"
-                              placeholder="Téléphone"
-                              required
-                              onChange={handleSettingsFieldChange}
-                              value={settingsMe.phone}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                            />
-                          </div>
-
-                          {/* Email */}
-                          <div>
-                            <label
-                              htmlFor="email"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Email
-                            </label>
-                            <input
-                              type="email"
-                              name="email"
-                              id="email"
-                              placeholder="Email"
-                              required
-                              onChange={handleSettingsFieldChange}
-                              value={settingsMe.email}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                            />
-                          </div>
-
-                          {/* Logo - admin seulement */}
-                          {user.role === 'admin' && (
-                            <div>
-                              <label
-                                htmlFor="logo"
-                                className={`block mb-1 font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                              >
-                                Logo
-                              </label>
-                              <input
-                                type="file"
-                                name="logo"
-                                id="logo"
-                                accept="image/*"
-                                className={`w-full ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
-                                onChange={handleSettingsLogoChange}
-                              />
-                            </div>
-                          )}
-
-                          {/* Username */}
-                          <div>
-                            <label
-                              htmlFor="username"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Nom d'utilisateur <span className='text-red-800'>*</span>
-                            </label>
-                            <input
-                              type="text"
-                              name="username"
-                              id="username"
-                              required
-                              onChange={handleSettingsFieldChange}
-                              value={settingsMe.username}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                            />
-                          </div>
-                        </>
-                      )}
-                      {showPasswordChange && (
-                        <>
-                          <div>
-                            <label
-                              htmlFor="oldPassword"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Ancien mot de passe <span className='text-red-800'>*</span>
-                            </label>
-                            <input
-                              type="password"
-                              name="oldPassword"
-                              id="oldPassword"
-                              value={oldPassword}
-                              onChange={(e) => setOldPassword(e.target.value)}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label
-                              htmlFor="newPassword"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Nouveau mot de passe <span className='text-red-800'>*</span>
-                            </label>
-                            <input
-                              type="password"
-                              name="newPassword"
-                              id="newPassword"
-                              placeholder='Minimum 6 caractères'
-                              value={newPassword}
-                              onChange={(e) => setNewPassword(e.target.value)}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label
-                              htmlFor="confirmPassword"
-                              className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                            >
-                              Confirmer le mot de passe <span className='text-red-800'>*</span>
-                            </label>
-                            <input
-                              type="password"
-                              name="confirmPassword"
-                              id="confirmPassword"
-                              value={confirmPassword}
-                              onChange={(e) => setConfirmPassword(e.target.value)}
-                              className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
-                                ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
-                              required
-                            />
-                          </div>
-                        </>
-                      )}
-                      {/* Boutons */}
-                      <button
-                        type="submit"
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
-                      >
-                        Enregistrer
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowPasswordChange(!showPasswordChange)}
-                        className={`w-full text-sm underline font-medium ${
-                          darkMode ? 'text-blue-400' : 'text-blue-700'
-                        }`}
-                      >
-                        {showPasswordChange ? 'Annuler' : 'Changer mon mot de passe'}
-                      </button>
-                    </form>
-
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          {view === 'employees' && (
-            <div className="flex-grow relative">
-              <div className="flex flex-grow flex pb-20">
-                <div className="flex-grow flex justify-center items-center">
-                <div className='flex flex-col'>
-                  <h1 className={`text-3xl font-bold mb-6 text-gray-800 text-center ${darkMode ? 'text-white' : ''}`}>Gestion des utilisateurs</h1>
-
-                  <div className="flex justify-end gap-4 mb-6">
-                    <div className="relative flex-1">
-                      <FaSearch className="absolute left-3 top-3 text-gray-400" />
-                      <input
-                        type="text"
-                        placeholder="Rechercher par nom ou email"
-                        onChange={(e) => filteredSubUsers(e)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                      />
-                    </div>
-
-                    <button 
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                      onClick={() => setEmployeeForm(true)}
-                    >
-                      <FaUserPlus /> Ajouter
-                    </button>
-                  </div>
-
-                  <div className='flex justify-center items-center mb-2'>
-                    {employeeForm && 
-                      <form 
-                        className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4 mt-1 mb-1"
-                        onSubmit={employeesFormSubmit}
-                      >
-                        <div className='flex justify-end items-center'>
-                          <button 
-                            type="button"
-                            onClick={() => setEmployeeForm(false)}
-                          >
-                            <FaWindowClose className='text-red-500'/>
-                          </button>
-                        </div>
-                        <h2 className="text-center text-1xl font-bold">
-                          Ajout un employé
-                        </h2>
+                  <form
+                    onSubmit={showPasswordChange ? handlePasswordReset : settingsSubmit}
+                    className={`p-8 rounded-lg shadow-md w-full max-w-md space-y-4 mt-1 mb-1 transition-colors duration-300
+                      ${darkMode ? 'bg-slate-800 text-gray-100 border border-gray-100' : 'bg-white text-gray-800'}`}
+                  >
+                    <h2 className="text-center font-bold">{showPasswordChange ? 'Changer le mot de passe' : 'Mes informations'}</h2>
+                    {!showPasswordChange && (
+                      <>
+                        {/* Nom */}
                         <div>
                           <label
                             htmlFor="name"
-                            className="block text-sm font-medium text-gray-700"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                           >
-                            Nom <span className='text-red-600'>*</span>
+                            Nom <span className='text-red-800'>*</span>
                           </label>
                           <input
                             type="text"
@@ -1679,17 +1070,20 @@ export default function App() {
                             id="name"
                             placeholder="Nom"
                             required
-                            onChange={(e) => setEmployeesFormData({...employeesFormData, name: e.target.value})}
-                            value={employeesFormData.name}
-                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            onChange={handleSettingsFieldChange}
+                            value={settingsMe.name}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                           />
                         </div>
+
+                        {/* Prénom */}
                         <div>
                           <label
                             htmlFor="surname"
-                            className="block text-sm font-medium text-gray-700"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                           >
-                            Prénom <span className='text-red-600'>*</span>
+                            Prénom <span className='text-red-800'>*</span>
                           </label>
                           <input
                             type="text"
@@ -1697,15 +1091,39 @@ export default function App() {
                             id="surname"
                             placeholder="Prénom"
                             required
-                            onChange={(e) => setEmployeesFormData({...employeesFormData, surname: e.target.value})}
-                            value={employeesFormData.surname}
-                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            onChange={handleSettingsFieldChange}
+                            value={settingsMe.surname}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                           />
                         </div>
+
+                        {/* Entreprise */}
+                        <div>
+                          <label
+                            htmlFor="entreprise"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                          >
+                            Entreprise
+                          </label>
+                          <input
+                            type="text"
+                            name="entreprise"
+                            id="entreprise"
+                            placeholder="Nom de l'entreprise"
+                            disabled={user.role !== 'admin'}
+                            onChange={handleSettingsFieldChange}
+                            value={settingsMe.entreprise}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                          />
+                        </div>
+
+                        {/* Adresse */}
                         <div>
                           <label
                             htmlFor="adresse"
-                            className="block text-sm font-medium text-gray-700"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                           >
                             Adresse
                           </label>
@@ -1714,17 +1132,20 @@ export default function App() {
                             name="adresse"
                             id="adresse"
                             placeholder="Adresse de l'entreprise"
-                            onChange={(e) => setEmployeesFormData({...employeesFormData, adresse: e.target.value})}
-                            value={employeesFormData.adresse}
-                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            onChange={handleSettingsFieldChange}
+                            value={settingsMe.adresse}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                           />
                         </div>
+
+                        {/* Téléphone */}
                         <div>
                           <label
                             htmlFor="phone"
-                            className="block text-sm font-medium text-gray-700"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                           >
-                            Téléphone <span className='text-red-600'>*</span>
+                            Téléphone
                           </label>
                           <input
                             type="text"
@@ -1732,293 +1153,165 @@ export default function App() {
                             id="phone"
                             placeholder="Téléphone"
                             required
-                            onChange={(e) => setEmployeesFormData({...employeesFormData, phone: e.target.value})}
-                            value={employeesFormData.phone}
-                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            onChange={handleSettingsFieldChange}
+                            value={settingsMe.phone}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                           />
                         </div>
+
+                        {/* Email */}
                         <div>
                           <label
                             htmlFor="email"
-                            className="block text-sm font-medium text-gray-700"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                           >
-                            Email <span className='text-red-600'>*</span>
+                            Email
                           </label>
                           <input
                             type="email"
                             name="email"
                             id="email"
                             placeholder="Email"
-                            onChange={(e) => setEmployeesFormData({...employeesFormData, email: e.target.value})}
-                            value={employeesFormData.email}
-                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            required
+                            onChange={handleSettingsFieldChange}
+                            value={settingsMe.email}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                           />
                         </div>
+
+                        {/* Logo - admin seulement */}
+                        {user.role === 'admin' && (
+                          <div>
+                            <label
+                              htmlFor="logo"
+                              className={`block mb-1 font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                            >
+                              Logo
+                            </label>
+                            <input
+                              type="file"
+                              name="logo"
+                              id="logo"
+                              accept="image/*"
+                              className={`w-full ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
+                              onChange={handleSettingsLogoChange}
+                            />
+                          </div>
+                        )}
+
+                        {/* Username */}
                         <div>
                           <label
                             htmlFor="username"
-                            className="block text-sm font-medium text-gray-700"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                           >
-                            Nom d'utilisateur <span className='text-red-600'>*</span>
+                            Nom d'utilisateur <span className='text-red-800'>*</span>
                           </label>
                           <input
                             type="text"
                             name="username"
                             id="username"
                             required
-                            onChange={(e) => setEmployeesFormData({...employeesFormData, username: e.target.value})}
-                            value={employeesFormData.username}
-                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            onChange={handleSettingsFieldChange}
+                            value={settingsMe.username}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                           />
                         </div>
-                        <div>
-                          <label htmlFor='role' className="block text-sm font-medium text-gray-700">Role</label>
-                          <select 
-                            name="role" 
-                            id="role" 
-                            className='mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500'
-                            onChange={(e) => setEmployeesFormData({...employeesFormData, role: e.target.value})}
-                          >
-                            <option value="admin">Admin</option>
-                            <option value="autres">Autres</option>
-                          </select>
-                        </div>
+                      </>
+                    )}
+                    {showPasswordChange && (
+                      <>
                         <div>
                           <label
-                            htmlFor="password"
-                            className="block text-sm font-medium text-gray-700"
+                            htmlFor="oldPassword"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
                           >
-                            Mot de passe <span className='text-red-600'>*</span>
+                            Ancien mot de passe <span className='text-red-800'>*</span>
                           </label>
                           <input
                             type="password"
-                            name="password"
-                            id="password"
+                            name="oldPassword"
+                            id="oldPassword"
+                            value={oldPassword}
+                            onChange={(e) => setOldPassword(e.target.value)}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
                             required
-                            onChange={(e) => setEmployeesFormData({...employeesFormData, password: e.target.value})}
-                            value={employeesFormData.password}
-                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                           />
                         </div>
-                        <button
-                          type="submit"
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
-                        >
-                          Enregistrer
-                        </button>
-                        <button 
-                          type="button"
-                          className="w-full text-blue-700"
-                        >
-                          Changer mon mot de passe
-                        </button>
-                      </form>
-                    }
-                  </div>
-
-                  <div
-                    className={`rounded-xl shadow overflow-hidden transition ${
-                      darkMode ? 'bg-slate-800 text-gray-100' : 'bg-white text-gray-800'
-                    }`}
-                  >
-                    {/* Table mode (desktop et tablette) */}
-                    <table className="w-full table-auto hidden md:table">
-                      <thead className={darkMode ? 'bg-slate-700 text-gray-200' : 'bg-gray-100 text-gray-700'}>
-                        <tr>
-                          <th className="text-left px-4 py-3">Nom</th>
-                          <th className="text-left px-4 py-3">Prenom</th>
-                          <th className="text-left px-4 py-3">Username</th>
-                          <th className="text-left px-4 py-3">Phone</th>
-                          <th className="text-left px-4 py-3">Email</th>
-                          <th className="text-left px-4 py-3">Adresse</th>
-                          <th className="text-left px-4 py-3">Rôle</th>
-                          <th className="text-right px-4 py-3">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {subUsersFiltered.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan="8"
-                              className={`text-center py-6 ${
-                                darkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}
-                            >
-                              Aucun utilisateur trouvé.
-                            </td>
-                          </tr>
-                        ) : (
-                          subUsersFiltered.map((subUser) => (
-                            <tr key={subUser.id} className={darkMode ? 'border-t border-slate-700' : 'border-t border-gray-200'}>
-                              <td className="px-4 py-3">{subUser.name}</td>
-                              <td className="px-4 py-3">{subUser.surname}</td>
-                              <td className="px-4 py-3">{subUser.username}</td>
-                              <td className="px-4 py-3">{subUser.phone}</td>
-                              <td className="px-4 py-3">{subUser.email}</td>
-                              <td className="px-4 py-3">{subUser.adresse}</td>
-                              <td className="px-4 py-3">{subUser.role}</td>
-                              <td className="px-4 py-3 text-right space-x-3">
-                                <button 
-                                  className="text-yellow-500 hover:text-yellow-400"
-                                  onClick={() => {
-                                    setSubUserId(subUser.id);
-                                    setEditedSubUserData({
-                                      name: subUser.name,
-                                      surname: subUser.surname,
-                                      username: subUser.username,
-                                      phone: subUser.phone,
-                                      email: subUser.email,
-                                      adresse: subUser.adresse,
-                                      role: subUser.role,
-                                      password: ''
-                                    })
-                                  }}  
-                                >
-                                  <FaEdit />
-                                </button>
-                                <button 
-                                  className="text-red-500 hover:text-red-400"
-                                  onClick={() => setSubUserToDelete(subUser.id)}
-                                >
-                                  <FaTrash />
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                    {subUserToDelete && (
-                      <div className={`fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50`}>
-                        <div className={`p-6 rounded-lg shadow-lg w-full max-w-sm border
-                          ${darkMode ? 'bg-slate-800 border-gray-100 text-white' : 'bg-white border-gray-300 text-gray-800'}`}>
-                          
-                          <h3 className="text-lg font-semibold mb-4 text-center">
-                            Confirmer la suppression ?
-                          </h3>
-                          <p className="text-center mb-6 text-red-600">
-                            Cette action est <strong>irréversible</strong>.
-                          </p>
-
-                          <div className="flex justify-between gap-4">
-                            <button
-                              onClick={() => handleDeleteSubUser(subUserToDelete)}
-                              className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
-                            >
-                              Supprimer
-                            </button>
-                            <button
-                              onClick={() => setSubUserToDelete(null)}
-                              className={`flex-1 px-4 py-2 rounded font-semibold transition
-                                ${darkMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-gray-300 hover:bg-gray-400'}`}
-                            >
-                              Annuler
-                            </button>
-                          </div>
+                        <div>
+                          <label
+                            htmlFor="newPassword"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                          >
+                            Nouveau mot de passe <span className='text-red-800'>*</span>
+                          </label>
+                          <input
+                            type="password"
+                            name="newPassword"
+                            id="newPassword"
+                            placeholder='Minimum 6 caractères'
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                            required
+                          />
                         </div>
-                      </div>
+                        <div>
+                          <label
+                            htmlFor="confirmPassword"
+                            className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                          >
+                            Confirmer le mot de passe <span className='text-red-800'>*</span>
+                          </label>
+                          <input
+                            type="password"
+                            name="confirmPassword"
+                            id="confirmPassword"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className={`mt-1 block w-full px-4 py-2 rounded-md shadow-sm transition
+                              ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`}
+                            required
+                          />
+                        </div>
+                      </>
                     )}
+                    {/* Boutons */}
+                    <button
+                      type="submit"
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition"
+                    >
+                      Enregistrer
+                    </button>
 
-                    {/* Mobile card mode */}
-                    <div className={darkMode ? 'md:hidden divide-y divide-slate-700' : 'md:hidden divide-y divide-gray-200'}>
-                      {subUsersFiltered.length === 0 ? (
-                        <p className={`text-center py-6 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          Aucun utilisateur trouvé.
-                        </p>
-                      ) : (
-                        subUsersFiltered.map((subUser) => (
-                          <div key={subUser.id} className="p-4">
-                            <p>
-                              <span className="font-semibold">Nom:</span> {subUser.name}
-                            </p>
-                            <p>
-                              <span className="font-semibold">Prénom:</span> {subUser.surname}
-                            </p>
-                            <p>
-                              <span className="font-semibold">Username:</span> {subUser.username}
-                            </p>
-                            <p>
-                              <span className="font-semibold">Téléphone:</span> {subUser.phone}
-                            </p>
-                            <p>
-                              <span className="font-semibold">Email:</span> {subUser.email}
-                            </p>
-                            <p>
-                              <span className="font-semibold">Adresse:</span> {subUser.adresse}
-                            </p>
-                            <p>
-                              <span className="font-semibold">Rôle:</span> {subUser.role}
-                            </p>
-                            <div className="flex justify-end space-x-3 mt-2">
-                              <button 
-                                className="text-yellow-500 hover:text-yellow-400"
-                                onClick={() => {
-                                  setSubUserId(subUser.id);
-                                  setEditedSubUserData({
-                                    name: subUser.name,
-                                    surname: subUser.surname,
-                                    username: subUser.username,
-                                    phone: subUser.phone,
-                                    email: subUser.email,
-                                    adresse: subUser.adresse,
-                                    role: subUser.role,
-                                    password: ''
-                                  })
-                                }} 
-                              >
-                                <FaEdit />
-                              </button>
-                              <button 
-                                className="text-red-500 hover:text-red-400"
-                                onClick={() => setSubUserToDelete(subUser.id)}
-                              >
-                                <FaTrash />
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                      {subUserToDelete && (
-                        <div className={`fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50`}>
-                          <div className={`p-6 rounded-lg shadow-lg w-full max-w-sm border
-                            ${darkMode ? 'bg-slate-800 border-gray-100 text-white' : 'bg-white border-gray-300 text-gray-800'}`}>
-                            
-                            <h3 className="text-lg font-semibold mb-4 text-center">
-                              Confirmer la suppression ?
-                            </h3>
-                            <p className="text-center mb-6">
-                              Cette action est <strong>irréversible</strong>.
-                            </p>
-
-                            <div className="flex justify-between gap-4">
-                              <button
-                                onClick={() => handleDeleteSubUser(subUserToDelete)}
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
-                              >
-                                Supprimer
-                              </button>
-                              <button
-                                onClick={() => setSubUserToDelete(null)}
-                                className={`flex-1 px-4 py-2 rounded font-semibold transition
-                                  ${darkMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-gray-300 hover:bg-gray-400'}`}
-                              >
-                                Annuler
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {subUserId && (
-                    <SubUserEditForm handleEditSubUserSubmit={handleEditSubUserSubmit} darkMode={darkMode} editedSubUserData={editedSubUserData}
-                      setEditedSubUserData={setEditedSubUserData} setSubUserId={setSubUserId}
-                    />
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordChange(!showPasswordChange)}
+                      className={`w-full text-sm underline font-medium ${
+                        darkMode ? 'text-blue-400' : 'text-blue-700'
+                      }`}
+                    >
+                      {showPasswordChange ? 'Annuler' : 'Changer mon mot de passe'}
+                    </button>
+                  </form>
                 </div>
               </div>
+              <ToastContainer/>
             </div>
-            </div>
+          )}
+          {view === 'employees' && (
+            <Employees 
+              darkMode={darkMode} filteredSubUsers={filteredSubUsers}
+              subUsersFiltered={subUsersFiltered} setSubUserId={setSubUserId}
+              setEditedSubUserData={setEditedSubUserData} setSubUserToDelete={setSubUserToDelete} subUserToDelete={subUserToDelete}
+              handleDeleteSubUser={handleDeleteSubUser} editedSubUserData={editedSubUserData} handleEditSubUserSubmit={handleEditSubUserSubmit}
+              loadSubUsers={loadSubUsers}
+            />
           )}
           {view === 'about' && (
             <div className="flex-grow relative">
@@ -2027,30 +1320,76 @@ export default function App() {
                 <AboutPage darkMode={darkMode}/>
                 </div>
               </div>
+              <ToastContainer/>
             </div>
           )}
           {view == 'analyse' && (
             // {analyserAvecIA}
-            <div className={`p-6 max-w-3xl mx-auto`}>
-              <h2 className={`text-2xl font-bold mb-4 text-center ${darkMode ? 'text-white' : 'text-indigo-700'}`}>🔍 Analyse IA des ventes</h2>
-              
-              <div className="text-center mb-6">
-                <button 
+            <div className="p-4 sm:p-6 w-full flex flex-col space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row w-full justify-between items-start sm:items-center gap-3">
+                <h2
+                  className={`text-xl sm:text-2xl font-bold ${
+                    darkMode ? "text-white" : "text-gray-800"
+                  }`}
+                >
+                  Analyse IA des ventes
+                </h2>
+
+                <button
                   onClick={handleAnalyseIA}
                   disabled={loadingAI}
-                  className={`${user.tokens_conseil == 0 ? 'bg-red-600': 'bg-purple-600'} hover:bg-purple-700 text-white px-6 py-2 rounded shadow`}>
+                  className={`w-full sm:w-auto px-4 py-2 rounded-lg shadow font-medium transition 
+                    ${user.tokens_conseil == 0 
+                      ? "bg-red-600 hover:bg-red-700" 
+                      : "bg-blue-600 hover:bg-blue-700"} 
+                    text-white disabled:opacity-60 disabled:cursor-not-allowed`}
+                >
                   {loadingAI ? "Analyse en cours..." : "Lancer l’analyse"}
                 </button>
               </div>
 
-              {analyseMarkDown && (
-                <div className={`prose prose-lg w-full p-4 rounded-xl shadow border overflow-auto break-words
-                  ${darkMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white'}`
-                  }>
-                  <ReactMarkdown>{analyseMarkDown}</ReactMarkdown>
-                </div>
-              )}
+              {/* Notification informative permanente */}
+              <div
+                className={`flex items-start gap-2 p-3 rounded-lg text-sm border shadow-md 
+                  ${darkMode 
+                    ? "bg-slate-700 text-gray-200 border-slate-600" 
+                    : "bg-blue-50 text-blue-800 border-blue-200"}`}
+              >
+                <span className="text-xl">ℹ️</span>
+                <p>
+                  L’analyse IA est basée sur les <strong>données de ventes effectuées</strong>.  
+                  Si vos ventes sont limitées ou incomplètes, les résultats peuvent être moins précis.
+                </p>
+              </div>
+
+              {/* Résultats IA avec animation */}
+              <AnimatePresence>
+                {analyseMarkDown && (
+                  <motion.div
+                    key="analyse-ia"
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 30 }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                    className={`prose prose-sm sm:prose-lg max-w-full sm:max-w-3xl w-full p-4 rounded-xl shadow border 
+                      overflow-auto transition duration-300
+                      ${darkMode ? "bg-slate-800 text-white border-gray-700" : "bg-white border-gray-200"}`}
+                  >
+                    <ReactMarkdown>{analyseMarkDown}</ReactMarkdown>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <ToastContainer position="bottom-right" />
             </div>
+
+          )}
+          {view === 'categories' && (
+            <Categories categories={categories} setCategories={setCategories} darkMode={darkMode} loadCategories={loadCategories}/>
+          )}
+          {view === 'support' && (
+            <ContactPage darkMode={darkMode} user={user}/>
           )}
           {/* Bouton panier mobile */}
           {view !== 'settings' && 
@@ -2061,6 +1400,9 @@ export default function App() {
               <span>Panier ({cart.length})</span>
             </button>
           }
+          {view === 'showSale' && (
+            <SelectedSale darkMode={darkMode} s={selectedSale}/>
+          )}
           {cartOpen && (
             <div className="fixed inset-0 z-50 flex justify-end sm:hidden">
               {/* Overlay */}
@@ -2124,16 +1466,15 @@ export default function App() {
                 <button
                   onClick={checkout}
                   disabled={isLoadingCheckout}
-                  className="mt-4 w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2"
+                  className="mt-4 w-full px-4 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2"
                 >
                   {isLoadingCheckout ? "Traitement..." : <><FaCheck /> Valider la vente</>}
                 </button>
               </div>
             </div>
-          )}
+          )} 
         </div>
       </div>
-      <ToastContainer />
     </div>
   );
 }

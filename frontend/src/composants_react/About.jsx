@@ -1,6 +1,7 @@
 import React from "react";
 import { FaMapPin, FaPhone, FaVoicemail } from "react-icons/fa";
 import { motion } from "framer-motion";
+import {ToastContainer, toast} from "react-toastify";
 
 export default function AboutPage ({darkMode}) {
   return (
@@ -99,6 +100,7 @@ export default function AboutPage ({darkMode}) {
           <li className="flex items-center gap-2"><FaMapPin className="text-blue-500" /> Bamako (Mali), Sebenikoro</li>
         </ul>
       </motion.section>
+      <ToastContainer />
     </motion.div>
   );
 };

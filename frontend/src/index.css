@@ -147,3 +147,32 @@ html, body {
 body {
   font-family: 'Poppins', sans-serif;
 }
+
+/* WebKit (Chrome, Edge, Safari) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;                 /* vertical */
+  height: 8px;                /* horizontal si besoin */
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;    /* piste */
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #555555;        /* poignée */
+  border-radius: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #464646;        /* survol */
+}
+
+/* Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  /* ordre: thumb puis track */
+  scrollbar-color: #555555 transparent;
+}
+
+/* Optionnel: évite le "saut" de layout quand la scrollbar apparaît */
+.custom-scrollbar {
+  scrollbar-gutter: stable;
+}
+

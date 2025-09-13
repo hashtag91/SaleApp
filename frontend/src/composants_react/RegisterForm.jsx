@@ -1,4 +1,5 @@
 import React from 'react';
+import { ToastContainer, toast } from 'react-toastify';
 
 export default function RegisterForm({ setName, setSurname, setEntreprise, setAdress, setPhone, setEmail, setUsername, setPassword, setLogo, handleRegister, setShowRegister, darkMode}) {
   return (
@@ -137,6 +138,7 @@ export default function RegisterForm({ setName, setSurname, setEntreprise, setAd
       >
         J'ai déjà un compte
       </button>
+      <ToastContainer/>
     </form>
   );
 }

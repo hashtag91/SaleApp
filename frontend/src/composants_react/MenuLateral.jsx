@@ -10,10 +10,10 @@ import {
   FaCog,
   FaHome,
   FaLocationArrow,
+  FaHeadset,
 } from 'react-icons/fa';
 
-export default function MenuLateral({ user, setView, view, loadProducts, loadingAI, loadSales, openMenu1 }) {
-  const [currentPage, setCurrentPage] = useState('dashboard');
+export default function MenuLateral({ user, setView, view, loadProducts, loadingAI, loadSales, openMenu1,  settingsRetrieve}) {
 
   const [openMenu, setOpenMenu] = useState(null);
 
@@ -43,7 +43,7 @@ export default function MenuLateral({ user, setView, view, loadProducts, loading
                 className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
                     view === 'dashboard' ? 'bg-gray-200' : ''
                 }`}
-                onClick={() => 'dashboard'}
+                onClick={() => setView('dashboard')}
             >
                 <FaHome className="text-gray-700" />
                 <button className="text-gray-700">Tableau de bord</button>
@@ -51,28 +51,27 @@ export default function MenuLateral({ user, setView, view, loadProducts, loading
         }
         <div
         className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
-            view === 'caisse' ? 'bg-gray-200' : ''
+            view === 'pos' ? 'bg-gray-200' : ''
         }`}
-        onClick={() => setView('pos')}
+        onClick={() => {setView('pos')}}
         >
         <FaShoppingCart className="text-gray-700" />
         <button className="text-gray-700">Caisse</button>
         </div>
         <div className={`flex flex-col gap-1`}>
-        {user.role && 
-            <div
-                className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer`}
-                onClick={() => toggleMenu('stock')}
-            >
-                <FaTag className="text-gray-700" />
-                <span className="flex-1 text-gray-700">Stock</span>
-                <FaChevronRight
-                    className={`text-gray-700 text-sm transition-transform ${
-                        openMenu === 'stock' ? 'rotate-90' : ''
-                    }`}
-                />
-            </div>
-        }
+
+        <div
+            className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer`}
+            onClick={() => toggleMenu('stock')}
+        >
+            <FaTag className="text-gray-700" />
+            <span className="flex-1 text-gray-700">Stock</span>
+            <FaChevronRight
+                className={`text-gray-700 text-sm transition-transform ${
+                    openMenu === 'stock' ? 'rotate-90' : ''
+                }`}
+            />
+        </div>
 
         <ul
             className={`overflow-hidden transition-all duration-300 max-h-0 opacity-0 pointer-events-none ${
@@ -83,27 +82,27 @@ export default function MenuLateral({ user, setView, view, loadProducts, loading
         >
             <li
             className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer text-gray-700 ${
-                currentPage === 'products' ? 'bg-gray-200' : ''
+                view === 'admin' ? 'bg-gray-200' : ''
             }`}
-            onClick={() => { setView('admin'); loadProducts(); }}
+            onClick={() => { setView('admin'); loadProducts();}}
             >
             Produits
             </li>
-            <li
+            {user.role === 'admin' && (<li
             className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer text-gray-700 ${
-                currentPage === 'category' ? 'bg-gray-200' : ''
+                view === 'categories' ? 'bg-gray-200' : ''
             }`}
-            onClick={() => setCurrentPage('category')}
+            onClick={() => {setView('categories')}}
             >
-            Catégorie
-            </li>
+            Catégories
+            </li>)}
         </ul>
         </div>
         <div
         className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
-            currentPage === 'sell' ? 'bg-gray-200' : ''
+            view === 'sales' ? 'bg-gray-200' : ''
         }`}
-        onClick={() => { setView('sales'); loadSales(); }}
+        onClick={() => { setView('sales'); loadSales();}}
         >
         <FaMoneyBill className="text-gray-700" />
         <button className="text-gray-700">Ventes</button>
@@ -111,7 +110,7 @@ export default function MenuLateral({ user, setView, view, loadProducts, loading
         {user.role === 'admin' && 
             <div
             className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
-                currentPage === 'statistique' ? 'bg-gray-200' : ''
+                view === 'charts' ? 'bg-gray-200' : ''
             }`}
             onClick={() => {
                 setView('charts');
@@ -125,14 +124,20 @@ export default function MenuLateral({ user, setView, view, loadProducts, loading
         {user.role === 'admin' &&
             <div
                 className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
-                    currentPage === 'conseil' ? 'bg-gray-200' : ''
+                    view === 'analyse' ? 'bg-gray-200' : ''
                 }`}
-                onClick={() => setView('analyse')}
+                onClick={() => {setView('analyse');}}
                 disabled={loadingAI}
             >
                 <FaRobot className="text-gray-700" />
-                <button className="text-gray-700">
-                    {loadingAI ? "Analyse en cours..." : `Analyse IA (${user.tokens_conseil})`}
+                <button className="text-gray-700 flex gap-2">
+                    {loadingAI ? (
+                        "Analyse en cours..."
+                    ) : (
+                        <>
+                        Analyse IA <div className='w-5 h-5 rounded-full bg-red-600 flex justify-center items-center'><span className='text-white'>{user.tokens_conseil}</span></div>
+                        </>
+                    )}
                 </button>
             </div>
         }
@@ -159,32 +164,43 @@ export default function MenuLateral({ user, setView, view, loadProducts, loading
         >
             <li
             className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer text-gray-700 ${
-                currentPage === 'profil' ? 'bg-gray-200' : ''
+                view === 'profil' ? 'bg-gray-200' : ''
             }`}
-            onClick={() => {setView('profil'), setCurrentPage('profil')}}
+            onClick={() => {setView('profil'); settingsRetrieve()}}
             >
             Profil
             </li>
             {user.role === 'admin' &&
                 <li
                 className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer text-gray-700 ${
-                    currentPage === 'employees' ? 'bg-gray-200' : ''
+                    view === 'employees' ? 'bg-gray-200' : ''
                 }`}
-                onClick={() => {setView('employees'), setCurrentPage('employees')}}
+                onClick={() => {setView('employees')}}
                 >
                     Employés
                 </li>
             }
             <li
             className={`px-10 py-1 hover:bg-gray-100 text-sm cursor-pointer text-gray-700 ${
-                currentPage === 'about' ? 'bg-gray-200' : ''
+                view === 'about' ? 'bg-gray-200' : ''
             }`}
-            onClick={() => {setView('about'), setCurrentPage('about')}}
+            onClick={() => {setView('about')}}
             >
             A propos
             </li>
         </ul>
         </div>
+        {user.role === 'admin' &&
+            <div
+                className={`flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                    view === 'support' ? 'bg-gray-200' : ''
+                }`}
+                onClick={() => setView('support')}
+            >
+                <FaHeadset className="text-gray-700" />
+                <button className="text-gray-700">Service client</button>
+            </div>
+        }
     </div>
     </>
   );

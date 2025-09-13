@@ -5,12 +5,12 @@ import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-export default function SelectedProduct({darkMode, editedProduct, setEditProduct, handleEditChange, submitEditProduct, setView, loadProducts, editProduct}) {
+export default function SelectedProduct({darkMode, editedProduct, setEditProduct, handleEditChange, submitEditProduct, loadProducts, editProduct, setProductPage, categories}) {
     const handleDeleteProduct = async (id) => {
         if (!window.confirm('Supprimer ce produit ?')) return;
         await axios.delete(`/api/products/${id}`);
         loadProducts();
-        setView('admin');
+        setProductPage('products');
         setEditProduct(null);
         toast.success("Produit supprimé !")
     };
@@ -21,7 +21,7 @@ export default function SelectedProduct({darkMode, editedProduct, setEditProduct
             >
                 <button
                     className="bg-transparent"
-                    onClick={() => {setView('admin'), setEditProduct(null)}}
+                    onClick={() => {setProductPage('products'), setEditProduct(null)}}
                 >
                     <FaArrowLeft className={`${darkMode ? 'text-white' :'text-gray-800'}`} size={20}/>
                 </button>
@@ -52,6 +52,20 @@ export default function SelectedProduct({darkMode, editedProduct, setEditProduct
                     </div>
                 </div>
                 <input type="text" name="sku" value={editedProduct.sku} onChange={handleEditChange} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" required />
+                </div>
+                <div className='mb-2'>
+                    <label htmlFor='category' className="block text-sm font-medium text-gray-700">Catégorie</label>
+                    <select 
+                        name="category" 
+                        id="category" 
+                        className='mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500'
+                        onChange={handleEditChange}
+                        value={editedProduct.category}
+                    >
+                        {categories.map((c) => (
+                            <option value={c.category}>{c.category}</option>
+                        ))}
+                    </select>
                 </div>
                 <div className="mb-2">
                 <label className="block mb-1 font-medium text-gray-700">Prix (FCFA) <span className='text-red-900'>*</span></label>
